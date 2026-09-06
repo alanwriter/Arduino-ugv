@@ -7,6 +7,14 @@
 #include <avr/wdt.h>
 #include "vehicle_profile.h"
 
+#ifdef AUTORUN_PRESET_DEMO
+#ifndef AUTORUN_PRESET_PATH
+#error "AUTORUN_PRESET_PATH must select G1, G2, or G3."
+#elif AUTORUN_PRESET_PATH < 1 || AUTORUN_PRESET_PATH > 3
+#error "AUTORUN_PRESET_PATH must select G1, G2, or G3."
+#endif
+#endif
+
 // Shared closed-loop differential-drive controller.
 //
 // Safety rule: setup explicitly turns all L298N outputs off. A motor moves
@@ -773,7 +781,9 @@ struct PathStep {
 };
 
 constexpr int16_t DEMO_STRAIGHT_MM = 500;
-constexpr int16_t DEMO_SQUARE_SIDE_MM = 400;
+// The standard autonomous demonstration is a 700 mm square (G2). G1 remains
+// a shorter interactive/diagnostic straight path.
+constexpr int16_t DEMO_SQUARE_SIDE_MM = 700;
 constexpr int16_t DEMO_L_LEG_MM = 350;
 
 const PathStep PATH_STRAIGHT[] = {
@@ -813,13 +823,13 @@ unsigned long pathLastLeftEncoderProgressMs = 0;
 unsigned long pathLastRightEncoderProgressMs = 0;
 bool encoderPreflightPassed = false;
 
-#ifdef AUTORUN_G1_DEMO
+#ifdef AUTORUN_PRESET_DEMO
 // This common state machine is intentionally identical for every vehicle.
 constexpr unsigned long AUTORUN_STILLNESS_DELAY_MS = 3000UL;
 
 enum AutoRunState : uint8_t {
   AUTORUN_WAITING_FOR_STILLNESS,
-  AUTORUN_RUNNING_G1,
+  AUTORUN_RUNNING_PATH,
   AUTORUN_COMPLETE,
   AUTORUN_FAULT,
 };
@@ -1421,7 +1431,7 @@ void printHelp() {
   Serial.println(F("  R           stop, reset both encoder counts and pose"));
   Serial.println(F("  C           calibrate MPU6050 gyro; vehicle must be still"));
   Serial.println(F("  G1          500 mm straight path"));
-  Serial.println(F("  G2          400 mm square path"));
+  Serial.println(F("  G2          700 mm square path"));
   Serial.println(F("  G3          350 mm L-shaped path"));
   Serial.println(F("  P           current pose, speeds, PWM, and fault"));
   Serial.println(F("  D           encoder pin levels and AB diagnostics"));
@@ -1460,7 +1470,7 @@ void resetCountersAndPose() {
   Serial.println(F("Encoder counts and relative pose reset. Motors stopped."));
 }
 
-#ifdef AUTORUN_G1_DEMO
+#ifdef AUTORUN_PRESET_DEMO
 void updateAutoRunDemo() {
   switch (autoRunState) {
     case AUTORUN_WAITING_FOR_STILLNESS:
@@ -1484,18 +1494,22 @@ void updateAutoRunDemo() {
       // repeat that human-observed check at each boot. This bypass is limited
       // to demo builds; wheel, MPU and timeout protections remain active.
       encoderPreflightPassed = true;
-      Serial.println(F("Demo: using certified encoder preflight; starting G1."));
-      startPresetPath(1);
+      Serial.print(F("Demo: using certified encoder preflight; starting G"));
+      Serial.print(AUTORUN_PRESET_PATH);
+      Serial.println(F("."));
+      startPresetPath(AUTORUN_PRESET_PATH);
       if (motionMode != MOTION_PATH) {
         stopMotion(false);
-        Serial.println(F("Demo: G1 could not start; motors stopped."));
+        Serial.print(F("Demo: G"));
+        Serial.print(AUTORUN_PRESET_PATH);
+        Serial.println(F(" could not start; motors stopped."));
         autoRunState = AUTORUN_FAULT;
         return;
       }
-      autoRunState = AUTORUN_RUNNING_G1;
+      autoRunState = AUTORUN_RUNNING_PATH;
       return;
 
-    case AUTORUN_RUNNING_G1:
+    case AUTORUN_RUNNING_PATH:
       if (motionMode == MOTION_IDLE) {
         autoRunState = AUTORUN_COMPLETE;
         Serial.println(F("Demo complete. Motors remain stopped until power cycle."));
@@ -1647,7 +1661,7 @@ void enableSafetyWatchdog() {
 void setup() {
   disableWatchdogAfterReset();
   Serial.begin(115200);
-#ifdef AUTORUN_G1_DEMO
+#ifdef AUTORUN_PRESET_DEMO
   Serial.println(F(VEHICLE_PROFILE_DEMO_BOOT_MESSAGE));
 #else
   Serial.println(F(VEHICLE_PROFILE_BOOT_MESSAGE));
@@ -1671,20 +1685,22 @@ void setup() {
   Wire.setWireTimeout(WIRE_TIMEOUT_US, true);
   Wire.clearWireTimeoutFlag();
   if (initialiseMpu6050()) {
-#ifdef AUTORUN_G1_DEMO
-    Serial.println(F("MPU6050 detected. Demo will calibrate while still, then run G1."));
+#ifdef AUTORUN_PRESET_DEMO
+    Serial.print(F("MPU6050 detected. Demo will calibrate while still, then run G"));
+    Serial.print(AUTORUN_PRESET_PATH);
+    Serial.println(F("."));
 #else
     Serial.println(F("MPU6050 detected. Send C with the vehicle still."));
 #endif
   } else {
-#ifdef AUTORUN_G1_DEMO
+#ifdef AUTORUN_PRESET_DEMO
     Serial.println(F("MPU6050 not detected. Demo will remain stopped."));
 #else
     Serial.println(F("MPU6050 not detected. Manual tests work; G paths are blocked."));
 #endif
   }
 
-#ifdef AUTORUN_G1_DEMO
+#ifdef AUTORUN_PRESET_DEMO
   autoRunStartedMs = millis();
   Serial.println(F("Demo: keep vehicle completely still for 3 s after power-on."));
 #else
@@ -1696,11 +1712,11 @@ void setup() {
 }
 
 void loop() {
-#ifndef AUTORUN_G1_DEMO
+#ifndef AUTORUN_PRESET_DEMO
   readSerialCommands();
 #endif
   updateImu();
-#ifndef AUTORUN_G1_DEMO
+#ifndef AUTORUN_PRESET_DEMO
   printAttitudeTelemetry();
 #endif
   if (imuBusTimeoutOccurred) {
@@ -1710,7 +1726,7 @@ void loop() {
     imuBusTimeoutOccurred = false;
   }
 
-#ifdef AUTORUN_G1_DEMO
+#ifdef AUTORUN_PRESET_DEMO
   updateAutoRunDemo();
 #endif
 
@@ -1724,7 +1740,7 @@ void loop() {
     controlStep(dtSeconds);
   }
 
-#ifndef AUTORUN_G1_DEMO
+#ifndef AUTORUN_PRESET_DEMO
   reportTelemetry();
 #endif
   wdt_reset();
