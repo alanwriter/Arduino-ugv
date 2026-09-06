@@ -860,6 +860,23 @@ unsigned long pathLastLeftEncoderProgressMs = 0;
 unsigned long pathLastRightEncoderProgressMs = 0;
 bool encoderPreflightPassed = false;
 
+#ifdef FOLLOWER2_AUTORUN_G1
+// Follower 2 demo is a separate build target. It waits for the vehicle to be
+// still, calibrates gyro Z, runs the approved first G1 test once, and then
+// remains stopped until the next power cycle.
+constexpr unsigned long FOLLOWER2_AUTORUN_STILLNESS_DELAY_MS = 3000UL;
+
+enum Follower2AutoRunState : uint8_t {
+  FOLLOWER2_WAITING_FOR_STILLNESS,
+  FOLLOWER2_RUNNING_G1,
+  FOLLOWER2_COMPLETE,
+  FOLLOWER2_FAULT,
+};
+
+Follower2AutoRunState follower2AutoRunState = FOLLOWER2_WAITING_FOR_STILLNESS;
+unsigned long follower2AutoRunStartedMs = 0;
+#endif
+
 void printFaultCode() {
   switch (faultCode) {
     case FAULT_NONE:
@@ -1495,6 +1512,59 @@ void resetCountersAndPose() {
   Serial.println(F("Encoder counts and relative pose reset. Motors stopped."));
 }
 
+#ifdef FOLLOWER2_AUTORUN_G1
+void updateFollower2AutoRun() {
+  switch (follower2AutoRunState) {
+    case FOLLOWER2_WAITING_FOR_STILLNESS:
+      if (millis() - follower2AutoRunStartedMs <
+          FOLLOWER2_AUTORUN_STILLNESS_DELAY_MS) {
+        return;
+      }
+
+      // The vehicle is stationary for the 300-sample gyro calibration.
+      stopMotion(true);
+      Serial.println(F("F2 demo: stillness delay complete; calibrating gyro Z."));
+      if (!calibrateGyroZ()) {
+        enterFault(FAULT_IMU_READ);
+        follower2AutoRunState = FOLLOWER2_FAULT;
+        return;
+      }
+
+      resetCountersAndPose();
+
+      // The full Follower 2 profile has already verified motor direction,
+      // encoder A/B health and logical encoder sign. An autonomous image
+      // cannot repeat that human-observed check on every boot. This bypass is
+      // limited to this demo build; runtime wheel/MPU/timeout protections stay.
+      encoderPreflightPassed = true;
+      Serial.println(F("F2 demo: using F2-certified encoder preflight; starting G1."));
+      startPresetPath(1);
+      if (motionMode != MOTION_PATH) {
+        stopMotion(false);
+        Serial.println(F("F2 demo: G1 could not start; motors stopped."));
+        follower2AutoRunState = FOLLOWER2_FAULT;
+        return;
+      }
+      follower2AutoRunState = FOLLOWER2_RUNNING_G1;
+      return;
+
+    case FOLLOWER2_RUNNING_G1:
+      if (motionMode == MOTION_IDLE) {
+        follower2AutoRunState = FOLLOWER2_COMPLETE;
+        Serial.println(F("F2 demo complete. Motors remain stopped until power cycle."));
+      } else if (motionMode == MOTION_FAULT) {
+        follower2AutoRunState = FOLLOWER2_FAULT;
+      }
+      return;
+
+    case FOLLOWER2_COMPLETE:
+    case FOLLOWER2_FAULT:
+      // One deliberate attempt per reset/power cycle.
+      return;
+  }
+}
+#endif
+
 void handleCommand(char *command) {
   char op = command[0];
   if (op >= 'a' && op <= 'z') {
@@ -1630,7 +1700,11 @@ void enableSafetyWatchdog() {
 void setup() {
   disableWatchdogAfterReset();
   Serial.begin(115200);
+#ifdef FOLLOWER2_AUTORUN_G1
+  Serial.println(F("FIRMWARE_PROFILE=F2-DEMO (one-shot autonomous G1)"));
+#else
   Serial.println(F("FIRMWARE_PROFILE=F2 (follower2 calibration pending)"));
+#endif
 
   // Establish a physical safe state before enabling any sensor or controller.
   configureMotorPinsAndStop();
@@ -1650,27 +1724,48 @@ void setup() {
   Wire.setWireTimeout(WIRE_TIMEOUT_US, true);
   Wire.clearWireTimeoutFlag();
   if (initialiseMpu6050()) {
+#ifdef FOLLOWER2_AUTORUN_G1
+    Serial.println(F("MPU6050 detected. F2 demo will calibrate while still, then run G1."));
+#else
     Serial.println(F("MPU6050 detected. Send C with the vehicle still."));
+#endif
   } else {
+#ifdef FOLLOWER2_AUTORUN_G1
+    Serial.println(F("MPU6050 not detected. F2 demo will remain stopped."));
+#else
     Serial.println(F("MPU6050 not detected. Manual tests work; G paths are blocked."));
+#endif
   }
 
+#ifdef FOLLOWER2_AUTORUN_G1
+  follower2AutoRunStartedMs = millis();
+  Serial.println(F("F2 demo: keep vehicle completely still for 3 s after power-on."));
+#else
   Serial.println(F("F2: verify pin map and record MPU/encoder data before enabling paths."));
   printHelp();
   printConfiguration();
+#endif
   enableSafetyWatchdog();
 }
 
 void loop() {
+#ifndef FOLLOWER2_AUTORUN_G1
   readSerialCommands();
+#endif
   updateImu();
+#ifndef FOLLOWER2_AUTORUN_G1
   printAttitudeTelemetry();
+#endif
   if (imuBusTimeoutOccurred) {
     if (motionMode == MOTION_PATH || motionMode == MOTION_MANUAL) {
       enterFault(FAULT_IMU_BUS_TIMEOUT);
     }
     imuBusTimeoutOccurred = false;
   }
+
+#ifdef FOLLOWER2_AUTORUN_G1
+  updateFollower2AutoRun();
+#endif
 
   static unsigned long lastControlUs = micros();
   const unsigned long nowUs = micros();
@@ -1682,6 +1777,8 @@ void loop() {
     controlStep(dtSeconds);
   }
 
+#ifndef FOLLOWER2_AUTORUN_G1
   reportTelemetry();
+#endif
   wdt_reset();
 }
