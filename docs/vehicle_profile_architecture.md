@@ -34,3 +34,24 @@ profile edit. The demo control flow, 700 mm square definition, PID constants,
 MPU reading, encoder decoder, watchdog, stall protection and timeout protection
 remain identical across all vehicles. A profile approval gate prevents a
 vehicle from moving for any path it has not yet passed.
+
+## Turn diagnosis telemetry
+
+Use the full `nanoatmega328` image—not an autonomous demo—when investigating a
+bad turn. Its normal 500 ms motion status line automatically appends a
+`turn[...]` block during each `PATH_TURN_DEGREES` step:
+
+- `target_deg` is the fused-heading target for that turn;
+- `fused_deg` is the heading actually used by the controller;
+- `encoder_deg` and `gyro_deg` are independent integrations since the last
+  `R` pose reset; their values do **not** change motion control;
+- `error_deg`, `gyro_z_dps`, and `imu_consecutive_failures` expose remaining
+  angle, current yaw rate and intermittent I2C errors; and
+- `phase=turn` means it is driving toward the target; `phase=settle` means it
+  has stopped for the 180 ms settle/final-correction stage.
+
+The controller fuses 30% encoder heading with 70% gyro-Z increment. Therefore
+run `C`, then `R`, then `G2` and capture the serial lines before changing a
+PWM bias, geometry or controller gain. `T` is deliberately a stationary-only
+attitude viewer and is disabled as soon as the vehicle moves. Autonomous demo
+images suppress serial telemetry, so they are unsuitable for this diagnosis.
