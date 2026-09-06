@@ -6,17 +6,18 @@ same autonomous demo state machine. Branches differ only in
 
 ```text
 src/main.cpp              shared interactive controller, PID, safety and paths
-src/demo_autorun_g1.cpp   shared one-shot power-on demo entry point
+src/demo_autorun.cpp      shared one-shot power-on demo entry point
 platformio.ini            shared full and demo build environments
 src/vehicle_profile.h     the only vehicle-specific pin and parameter file
 ```
 
-Each vehicle has two build environments in its own branch:
+Each vehicle has these build environments in its own branch:
 
 | Environment | Role |
 | --- | --- |
 | `nanoatmega328` | Full interactive calibration/controller image. |
-| `nanoatmega328_demo_g1` | Wait 3 s, calibrate gyro Z, reset, G1 once, then stop. |
+| `nanoatmega328_demo_g1` | Optional: wait 3 s, calibrate gyro Z, reset, run G1 once, then stop. |
+| `nanoatmega328_demo_square` | Standard demo: wait 3 s, calibrate gyro Z, reset, run the shared 700 mm G2 square once, then stop. |
 
 Only these profile items may vary between vehicles:
 
@@ -28,6 +29,7 @@ Only these profile items may vary between vehicles:
 
 The current shared quadrature ISR is standardized for encoder pins D2/D8/D7/D12.
 Changing that map requires a deliberate low-level ISR refactor, not merely a
-profile edit. The demo control flow, PID constants, MPU reading, encoder
-decoder, watchdog, stall protection and timeout protection remain identical
-across all vehicles.
+profile edit. The demo control flow, 700 mm square definition, PID constants,
+MPU reading, encoder decoder, watchdog, stall protection and timeout protection
+remain identical across all vehicles. A profile approval gate prevents a
+vehicle from moving for any path it has not yet passed.
