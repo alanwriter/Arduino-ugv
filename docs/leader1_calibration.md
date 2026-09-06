@@ -1,14 +1,14 @@
 # Leader 1 — calibration record and test sequence
 
-Leader 1 uses the same full controller and `nanoatmega328_demo_g1` build target
-as Follower 1 and Follower 2. Its first MPU/encoder calibration is complete.
-The profile permits cautious straight-line `G1`; paths containing turns (`G2`,
-`G3`) remain locked until repeated floor tests verify the provisional geometry.
+Leader 1 uses the same full controller and `nanoatmega328_demo_square` build
+target as Follower 1 and Follower 2. Its first MPU/encoder calibration is complete.
+The profile permits cautious straight-line `G1` and one monitored 700 mm-square
+`G2` test. `G3` remains locked until the square's closure error is measured.
 
 The firmware now identifies itself as:
 
 ```text
-FIRMWARE_PROFILE=L1 (leader1 G1 calibration ready)
+FIRMWARE_PROFILE=L1 (leader1 G2 square test ready)
 ```
 
 ## Required sequence
@@ -56,19 +56,31 @@ The small error is appropriate for a hand-rotated check and does not justify a
 sign reversal or an additional filter.
 
 All three vehicles use the current shared provisional geometry of 65 mm wheel
-diameter and 130 mm wheel-centre track. It enables L1's first straight G1 test
-only; actual floor travel determines the later diameter/track refinements.
+diameter and 130 mm wheel-centre track. The successful first G1 run authorizes
+L1's monitored 700 mm-square G2 test. Its closure error will determine the
+later wheel-diameter/track refinements; G3 remains locked in the meantime.
 
-## First L1 ground G1 procedure
+## L1 ground-test procedure
 
 1. Upload the current `leader1` branch and verify its boot line says
    `FIRMWARE_PROFILE=L1`.
-2. On level ground with at least 1 m clear ahead, keep the physical motor-power
-   switch reachable. Send `C` while completely still, then `R`, then `G1`.
-3. Measure travelled distance, side offset and final heading. Repeat three
-   times and save each `P` line plus the physical measurements.
-4. Tune wheel diameter from repeatable travel error first. Do not unlock G2/G3
-   until straight travel is repeatable; then tune track width from turn tests.
+2. For the initial G1 check, use level ground with at least 1 m clear ahead.
+   Keep the physical motor-power switch reachable; send `C` while completely
+   still, then `R`, then `G1`. Measure travel, side offset and final heading.
+3. For the first square, clear at least a 2 m × 2 m area. In the full controller
+   send `C`, then `R`, then `G2`; it drives four 700 mm sides with four logical
+   left 90° turns. Stop with `S` or the motor-power switch if its path is unsafe.
+4. Record the final return-to-start distance, final heading and each visibly
+   incorrect turn. Tune wheel diameter from repeated straight error first, then
+   tune track width from the square's turn/closure error. Do not unlock G3 yet.
 
-The identical `nanoatmega328_demo_g1` environment will then become L1's
-autonomous demo without any core-code change.
+## Autonomous square demo
+
+After one observed full-controller G2 run, build and upload
+`nanoatmega328_demo_square`. On every reset it waits 3 s, calibrates gyro Z,
+resets the pose and runs the same 700 mm square once, then stops. It accepts no
+serial commands during the run, so keep the physical motor-power switch within
+reach and do not use it until the car is placed in the cleared test area.
+
+The same `nanoatmega328_demo_square` environment is the standard autonomous
+demo for F1, F2 and L1; profile approval determines whether it can move.

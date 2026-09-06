@@ -9,13 +9,13 @@
 #define VEHICLE_PROFILE_HELP_TITLE \
   "Leader 1 calibration controller ready. Motors are stopped after boot."
 #define VEHICLE_PROFILE_PATH_POLICY \
-  "Leader 1 provisional shared geometry: G1 enabled; G2/G3 locked."
+  "Leader 1: G1 and the first 700 mm G2 square are enabled; G3 locked."
 #define VEHICLE_PROFILE_BOOT_MESSAGE \
-  "FIRMWARE_PROFILE=L1 (leader1 G1 calibration ready)"
+  "FIRMWARE_PROFILE=L1 (leader1 G2 square test ready)"
 #define VEHICLE_PROFILE_DEMO_BOOT_MESSAGE \
-  "FIRMWARE_PROFILE=L1-DEMO (one-shot autonomous G1)"
+  "FIRMWARE_PROFILE=L1-DEMO (one-shot autonomous preset path)"
 #define VEHICLE_PROFILE_STARTUP_NOTICE \
-  "L1: G1 is ready for cautious floor tests; G2/G3 remain locked."
+  "L1: G1 and the first 700 mm G2 square are ready; G3 remains locked."
 
 // Current shared controller requires this standardized encoder interrupt map:
 // left A/B = D2/D8, right A/B = D7/D12. The low-level AVR decoder uses these
@@ -48,6 +48,6 @@ constexpr bool LEFT_ENCODER_REVERSED = false;
 constexpr bool RIGHT_ENCODER_REVERSED = true;
 constexpr bool GYRO_Z_REVERSED = false;
 
-// L1 may run cautious straight G1 tests. Paths containing turns remain locked
-// until repeated floor data verifies the provisional geometry above.
-constexpr uint8_t MAX_APPROVED_PRESET_PATH = 1;
+// L1 may run cautious G1 and a monitored first 700 mm G2 square. Keep G3
+// locked until the square's closure error is measured and geometry is refined.
+constexpr uint8_t MAX_APPROVED_PRESET_PATH = 2;
