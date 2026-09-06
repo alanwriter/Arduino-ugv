@@ -47,6 +47,8 @@ constexpr bool RIGHT_MOTOR_REVERSED = false;
 constexpr bool LEFT_ENCODER_REVERSED = false;
 constexpr bool RIGHT_ENCODER_REVERSED = true;
 constexpr bool GYRO_Z_REVERSED = false;
+// L1's current path-turn output remains at the shared base value.
+constexpr int TURN_PWM_BIAS = 0;
 
 // L1 may run cautious G1 and a monitored first 700 mm G2 square. Keep G3
 // locked until the square's closure error is measured and geometry is refined.
