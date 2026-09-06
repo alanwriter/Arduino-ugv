@@ -38,7 +38,10 @@ constexpr uint8_t MPU6050_SCL_PIN = A5;
 // program's 4x AB-quadrature decoder, not the old 2x test convention.
 // ---------------------------------------------------------------------------
 constexpr float PI_F = 3.14159265358979323846f;
-constexpr float LEFT_TICKS_PER_WHEEL_REVOLUTION = 1200.0f;
+// follower1, 2026-09-06: 12,035 decoded ticks across 10 marked left-wheel
+// revolutions. The right side stays at its conservative default until its
+// 10-revolution measurement is repeated with the same reference mark.
+constexpr float LEFT_TICKS_PER_WHEEL_REVOLUTION = 1203.5f;
 constexpr float RIGHT_TICKS_PER_WHEEL_REVOLUTION = 1200.0f;
 
 // MEASURE ME: outside tyre diameter and centre-to-centre wheel track.
@@ -109,6 +112,10 @@ constexpr long WHEEL_PROGRESS_FOR_STALL_TICKS = 8;
 constexpr unsigned long WHEEL_ENCODER_TIMEOUT_MS = 1300UL;
 constexpr unsigned long PREFLIGHT_MIN_VALID_EDGES = 40UL;
 constexpr unsigned long PREFLIGHT_MIN_PHASE_EDGES = 20UL;
+// A healthy quadrature encoder produces nearly equal A/B edge totals. This
+// deliberately leaves generous tolerance for short manual tests while
+// rejecting a disconnected phase that otherwise makes count cancel near zero.
+constexpr float PREFLIGHT_MIN_PHASE_EDGE_RATIO = 0.75f;
 constexpr unsigned int PREFLIGHT_MAX_INVALID_TRANSITIONS = 10U;
 
 constexpr float IMU_GYRO_BLEND = 0.70f;
@@ -924,12 +931,27 @@ void completePath() {
 
 bool encodersPassPreflight(const EncoderSnapshot &left,
                            const EncoderSnapshot &right) {
+  const unsigned long leftLowerPhaseEdges =
+      left.aEdges < left.bEdges ? left.aEdges : left.bEdges;
+  const unsigned long leftHigherPhaseEdges =
+      left.aEdges < left.bEdges ? left.bEdges : left.aEdges;
+  const unsigned long rightLowerPhaseEdges =
+      right.aEdges < right.bEdges ? right.aEdges : right.bEdges;
+  const unsigned long rightHigherPhaseEdges =
+      right.aEdges < right.bEdges ? right.bEdges : right.aEdges;
+
   return left.validEdges >= PREFLIGHT_MIN_VALID_EDGES &&
          right.validEdges >= PREFLIGHT_MIN_VALID_EDGES &&
          left.aEdges >= PREFLIGHT_MIN_PHASE_EDGES &&
          left.bEdges >= PREFLIGHT_MIN_PHASE_EDGES &&
          right.aEdges >= PREFLIGHT_MIN_PHASE_EDGES &&
          right.bEdges >= PREFLIGHT_MIN_PHASE_EDGES &&
+         static_cast<float>(leftLowerPhaseEdges) >=
+             static_cast<float>(leftHigherPhaseEdges) *
+                 PREFLIGHT_MIN_PHASE_EDGE_RATIO &&
+         static_cast<float>(rightLowerPhaseEdges) >=
+             static_cast<float>(rightHigherPhaseEdges) *
+                 PREFLIGHT_MIN_PHASE_EDGE_RATIO &&
          left.invalidTransitions <= PREFLIGHT_MAX_INVALID_TRANSITIONS &&
          right.invalidTransitions <= PREFLIGHT_MAX_INVALID_TRANSITIONS;
 }
@@ -1594,6 +1616,7 @@ void enableSafetyWatchdog() {
 void setup() {
   disableWatchdogAfterReset();
   Serial.begin(115200);
+  Serial.println(F("FIRMWARE_PROFILE=F1 (follower1 calibrated build)"));
 
   // Establish a physical safe state before enabling any sensor or controller.
   configureMotorPinsAndStop();

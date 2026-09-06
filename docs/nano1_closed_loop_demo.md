@@ -82,7 +82,7 @@ constexpr float WHEEL_TRACK_MM = 130.0f;
 
 1. 上傳，開啟 115200 baud Serial Monitor。開機後應顯示 Motors are stopped。
 2. 輪子仍不接馬達電源或先懸空，傳送 D。
-3. 手轉左右輪，各自確認 A、B edge 都增加、invalid 接近 0。若某輪任一相維持 0，先修接線或換 encoder。
+3. 手轉左右輪，各自確認 A、B edge 都增加且彼此接近、invalid 接近 0。預檢要求較少的一相至少達另一相的 75%；若某輪任一相維持 0 或兩相嚴重失衡，先修接線或換 encoder。
 4. 接上馬達電源、輪子懸空，傳送 F。兩輪應同時向車體前方轉，且 1.2 秒後自動停止。當兩輪 A、B 相都累積足夠 edge 時，程式會印出 Encoder preflight passed。
    - 若某顆物理方向錯誤，修改程式的 LEFT_MOTOR_REVERSED 或 RIGHT_MOTOR_REVERSED 為 true 後重新上傳。
 5. 傳送 R，再傳送 F，然後 P。邏輯前進時左右 encoder count 都應增加。
