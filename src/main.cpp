@@ -61,7 +61,9 @@ constexpr bool RIGHT_MOTOR_REVERSED = false;
 // Make a logical forward movement make both encoder counts increase.
 // Change one of these only after using F and inspecting the reported counts.
 constexpr bool LEFT_ENCODER_REVERSED = false;
-constexpr bool RIGHT_ENCODER_REVERSED = false;
+// follower1, 2026-09-06: F drives both wheels physically forward; left count
+// increases while right count decreases, so invert the right decoder only.
+constexpr bool RIGHT_ENCODER_REVERSED = true;
 
 // Make a logical left turn increase pose heading. Test with M-80,80.
 constexpr bool GYRO_Z_REVERSED = false;

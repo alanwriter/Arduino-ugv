@@ -9,6 +9,7 @@ PID、輪徑、輪距、馬達方向或右輪 ticks/rev。
 | --- | ---: | --- |
 | `LEFT_TICKS_PER_WHEEL_REVOLUTION` | `1203.5` | 記號對準後手轉左輪 10 圈，`count=12035`。|
 | `RIGHT_TICKS_PER_WHEEL_REVOLUTION` | `1200.0` | 暫不修改；需以同一套 10 圈記號流程重測。|
+| `RIGHT_ENCODER_REVERSED` | `true` | `F` 時兩輪物理前進，left count 為正、right count 為負。|
 | `GYRO_Z_REVERSED` | `false` | 已觀察到相對 yaw 可正、反向連續變化；下一步以實車「左轉為正」再確認。|
 
 ## Encoder 診斷
@@ -33,6 +34,15 @@ A_edges=5197, B_edges=5197, invalid=0
 
 - A/B 完全平衡、invalid 為 0，硬體訊號可用。
 - 當次沒有以與左輪相同的精準 10 圈記號流程確認，因此不以這筆資料覆寫 1200 ticks/rev。
+
+## F 手動方向測試
+
+`F`（PWM 80、1.2 秒上限）使左右輪都實際往車體前方旋轉；原始計數卻為
+left 正、right 負。因此本分支將 `RIGHT_ENCODER_REVERSED` 設為 `true`，使
+未來邏輯前進時兩輪 count 都增加。
+
+左輪在這次等 PWM 手動測試中較快，車體偏向右前方。`F` 是開迴路 PWM 測試，
+不使用輪速 PID；先不據此調 PID，待反相後以閉迴路 `G1` 的速度與偏航結果再調整。
 
 ## MPU6050 診斷
 
