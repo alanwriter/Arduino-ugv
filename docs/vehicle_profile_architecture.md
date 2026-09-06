@@ -25,7 +25,7 @@ Only these profile items may vary between vehicles:
 - gyro-Z sign;
 - left/right decoded ticks per wheel revolution;
 - wheel diameter and track width; and
-- the highest approved preset path (`0` none, `1` G1 only, `3` G1–G3).
+- the highest enabled preset path (`0` none, `1` G1 only, `2` G1–G2, `3` G1–G3).
 
 The current shared quadrature ISR is standardized for encoder pins D2/D8/D7/D12.
 Changing that map requires a deliberate low-level ISR refactor, not merely a

@@ -7,7 +7,7 @@ cannot accidentally use another car's encoder or direction settings.
 | Vehicle | Full calibration branch | Autonomous demo build target | Current state |
 | --- | --- | --- | --- |
 | Follower 1 | `follower1` | `nanoatmega328_demo_square` in `follower1` | Full profile calibrated; G1–G3 approved. |
-| Follower 2 | `follower2` | `nanoatmega328_demo_square` in `follower2` | MPU/encoder calibration recorded; G1 approved, square remains gated until G2 is tested. |
+| Follower 2 | `follower2` | `nanoatmega328_demo_square` in `follower2` | MPU/encoder calibration recorded; one supervised first 700 mm square run enabled; G3 locked. |
 | Leader 1 | `leader1` | `nanoatmega328_demo_square` in `leader1` | MPU/encoder calibration recorded; first 700 mm square test authorized. |
 
 ## Repeatable cycle for each vehicle
