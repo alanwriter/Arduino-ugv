@@ -102,7 +102,7 @@ constexpr float WHEEL_TRACK_MM = 130.0f;
 | R | 停止、歸零兩輪 encoder 與相對座標 |
 | C | 靜止時校正 MPU6050 gyro Z |
 | G1 | 直走 500 mm 後停 |
-| G2 | 400 mm 方形，四次左轉 90° 後停 |
+| G2 | 700 mm 方形，四次左轉 90° 後停 |
 | G3 | 350 mm L 型：直走、左轉 90°、再直走 |
 | P | 目前相對座標、輪速、PWM、fault |
 | D | 四個 encoder 腳位與完整 AB 診斷 |

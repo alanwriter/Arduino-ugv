@@ -93,7 +93,7 @@ Arduino Nano
 | `R` | 停止、清除 encoder count、重設相對座標與 heading | 每次新的行程／測試前建議使用。 |
 | `C` | 車體靜止時校正 MPU6050 gyro Z bias | 執行約 1.5 秒；期間不可移動車子。完成後才可使用路徑命令。 |
 | `G1` | 執行 500 mm 直線 | 需要 MPU 已校正、encoder preflight 已通過。 |
-| `G2` | 執行 400 mm × 400 mm 方形路徑 | 同上；第一次實車測試不要直接使用。 |
+| `G2` | 執行 700 mm × 700 mm 方形路徑 | 同上；須由該車 profile 開放，首次方形測試應受監看。 |
 | `G3` | 執行 350 mm L 型路徑 | 同上。 |
 | `P` | 回傳姿態、輪速、PWM、fault、encoder preflight 狀態 | Pi 主要狀態查詢命令。 |
 | `D` | 回傳 encoder 腳位與 AB 診斷 | 檢查 A/B phase 是否都有 edge、`invalid` 是否接近 0。 |
