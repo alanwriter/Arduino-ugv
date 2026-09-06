@@ -856,24 +856,6 @@ unsigned long pathLastLeftEncoderProgressMs = 0;
 unsigned long pathLastRightEncoderProgressMs = 0;
 bool encoderPreflightPassed = false;
 
-#ifdef F2_AUTORUN_G1
-// F2 is intentionally a separate build target: after a short stillness delay
-// it calibrates yaw, resets its relative pose, runs G1 once, then remains
-// stopped until the next power cycle.  The normal F1 build never compiles this
-// state machine.
-constexpr unsigned long F2_AUTORUN_STILLNESS_DELAY_MS = 3000UL;
-
-enum F2AutoRunState : uint8_t {
-  F2_WAITING_FOR_STILLNESS,
-  F2_RUNNING_G1,
-  F2_COMPLETE,
-  F2_FAULT,
-};
-
-F2AutoRunState f2AutoRunState = F2_WAITING_FOR_STILLNESS;
-unsigned long f2AutoRunStartedMs = 0;
-#endif
-
 void printFaultCode() {
   switch (faultCode) {
     case FAULT_NONE:
@@ -1501,59 +1483,6 @@ void resetCountersAndPose() {
   Serial.println(F("Encoder counts and relative pose reset. Motors stopped."));
 }
 
-#ifdef F2_AUTORUN_G1
-void updateF2AutoRun() {
-  switch (f2AutoRunState) {
-    case F2_WAITING_FOR_STILLNESS:
-      if (millis() - f2AutoRunStartedMs < F2_AUTORUN_STILLNESS_DELAY_MS) {
-        return;
-      }
-
-      // This also keeps motor output at zero during the 300 gyro samples.
-      stopMotion(true);
-      Serial.println(F("F2: stillness delay complete; calibrating gyro Z."));
-      if (!calibrateGyroZ()) {
-        enterFault(FAULT_IMU_READ);
-        f2AutoRunState = F2_FAULT;
-        return;
-      }
-
-      resetCountersAndPose();
-
-      // F2 is only flashed after F1 has proved that both A/B encoder phases
-      // work and that logical forward produces increasing counts.  An
-      // autonomous power-on demo cannot perform that human-observed test, so
-      // this is a compile-time F2-only certification bypass.  The runtime
-      // wheel-progress, timeout and MPU failure protections remain enabled.
-      encoderPreflightPassed = true;
-      Serial.println(F("F2: using F1-certified encoder preflight; starting G1."));
-      startPresetPath(1);
-      if (motionMode != MOTION_PATH) {
-        stopMotion(false);
-        Serial.println(F("F2: G1 could not start; motors stopped."));
-        f2AutoRunState = F2_FAULT;
-        return;
-      }
-      f2AutoRunState = F2_RUNNING_G1;
-      return;
-
-    case F2_RUNNING_G1:
-      if (motionMode == MOTION_IDLE) {
-        f2AutoRunState = F2_COMPLETE;
-        Serial.println(F("F2 complete. Motors remain stopped until power cycle."));
-      } else if (motionMode == MOTION_FAULT) {
-        f2AutoRunState = F2_FAULT;
-      }
-      return;
-
-    case F2_COMPLETE:
-    case F2_FAULT:
-      // One-shot means exactly one attempt per Nano reset/power cycle.
-      return;
-  }
-}
-#endif
-
 void handleCommand(char *command) {
   char op = command[0];
   if (op >= 'a' && op <= 'z') {
@@ -1689,11 +1618,7 @@ void enableSafetyWatchdog() {
 void setup() {
   disableWatchdogAfterReset();
   Serial.begin(115200);
-#ifdef F2_AUTORUN_G1
-  Serial.println(F("FIRMWARE_PROFILE=F2 (one-shot autonomous G1)"));
-#else
   Serial.println(F("FIRMWARE_PROFILE=F1 (follower1 calibrated build)"));
-#endif
 
   // Establish a physical safe state before enabling any sensor or controller.
   configureMotorPinsAndStop();
@@ -1713,47 +1638,26 @@ void setup() {
   Wire.setWireTimeout(WIRE_TIMEOUT_US, true);
   Wire.clearWireTimeoutFlag();
   if (initialiseMpu6050()) {
-#ifdef F2_AUTORUN_G1
-    Serial.println(F("MPU6050 detected. F2 will calibrate while still, then run G1."));
-#else
     Serial.println(F("MPU6050 detected. Send C with the vehicle still."));
-#endif
   } else {
-#ifdef F2_AUTORUN_G1
-    Serial.println(F("MPU6050 not detected. F2 will remain stopped."));
-#else
     Serial.println(F("MPU6050 not detected. Manual tests work; G paths are blocked."));
-#endif
   }
 
-#ifdef F2_AUTORUN_G1
-  f2AutoRunStartedMs = millis();
-  Serial.println(F("F2: keep vehicle completely still for 3 s after power-on."));
-#else
   printHelp();
   printConfiguration();
-#endif
   enableSafetyWatchdog();
 }
 
 void loop() {
-#ifndef F2_AUTORUN_G1
   readSerialCommands();
-#endif
   updateImu();
-#ifndef F2_AUTORUN_G1
   printAttitudeTelemetry();
-#endif
   if (imuBusTimeoutOccurred) {
     if (motionMode == MOTION_PATH || motionMode == MOTION_MANUAL) {
       enterFault(FAULT_IMU_BUS_TIMEOUT);
     }
     imuBusTimeoutOccurred = false;
   }
-
-#ifdef F2_AUTORUN_G1
-  updateF2AutoRun();
-#endif
 
   static unsigned long lastControlUs = micros();
   const unsigned long nowUs = micros();
@@ -1765,8 +1669,6 @@ void loop() {
     controlStep(dtSeconds);
   }
 
-#ifndef F2_AUTORUN_G1
   reportTelemetry();
-#endif
   wdt_reset();
 }
