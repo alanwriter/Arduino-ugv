@@ -47,6 +47,9 @@ constexpr bool RIGHT_MOTOR_REVERSED = false;
 constexpr bool LEFT_ENCODER_REVERSED = false;
 constexpr bool RIGHT_ENCODER_REVERSED = true;
 constexpr bool GYRO_Z_REVERSED = false;
+// F2 needs a small extra signed output only while a path executes a turn.
+// It does not change straight segments or serial manual PWM commands.
+constexpr int TURN_PWM_BIAS = 10;
 
 // This authorizes one supervised first G2 calibration run, not final square
 // approval. Keep G3 locked until closure error and turn geometry are measured.
