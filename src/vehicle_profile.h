@@ -13,7 +13,7 @@
 #define VEHICLE_PROFILE_BOOT_MESSAGE \
   "FIRMWARE_PROFILE=F2 (follower2 calibration pending)"
 #define VEHICLE_PROFILE_DEMO_BOOT_MESSAGE \
-  "FIRMWARE_PROFILE=F2-DEMO (one-shot autonomous G1)"
+  "FIRMWARE_PROFILE=F2-DEMO (one-shot autonomous preset path)"
 #define VEHICLE_PROFILE_STARTUP_NOTICE \
   "F2: verify pin map and record MPU/encoder data before enabling paths."
 

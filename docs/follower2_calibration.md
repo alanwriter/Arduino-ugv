@@ -75,9 +75,11 @@ new motor direction or unknown encoder wire.
 | Wheel diameter (mm) | 65, provisional | approximate outside measurement |
 | Track width (mm) | 130, provisional | shared three-vehicle wheel-centre assumption |
 
-After this record is complete, create `follower2-demo` from the approved F2
-branch. Its autonomous sequence will be the same pattern as Follower 1 demo:
-power on, stillness delay, gyro-Z calibration, reset pose, fixed G1, then stop.
+The standard autonomous target is `nanoatmega328_demo_square` in this branch.
+It powers on, waits for stillness, calibrates gyro-Z, resets pose and attempts
+the shared 700 mm G2 square once. F2 currently approves only G1, so the square
+demo deliberately calibrates then remains stopped until F2's own G2 turn test
+is approved; do not use that safety stop as a firmware fault.
 
 ## 2026-09-06 first sensor/encoder result
 
