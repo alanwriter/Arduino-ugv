@@ -12,21 +12,22 @@ FIRMWARE_PROFILE=F2 (follower2 calibration pending)
 ```
 
 It supports all safe diagnostic commands (`I`, `C`, `T`, `R`, `D`, `F`, `B`,
-`M`, `P`). The first measured values now enable a cautious `G1` only; `G2`
-and `G3` remain blocked until repeated ground tests confirm F2 geometry.
+`M`, `P`). The measured profile enables cautious `G1` and one supervised 700
+mm-square `G2` calibration run; that is not final square approval. `G3`
+remains blocked until the square's closure error is measured.
 
 ## Before upload: confirm the F2 pin map
 
-The source currently contains the old Follower 1 reference map only. Confirm
-or replace it before connecting motor power:
+The tested F2 profile uses the standardized shared map below. Confirm every
+wire before connecting motor power:
 
 | Signal | Current temporary reference | Follower 2 actual connection |
 | --- | --- | --- |
-| Left encoder A/B | D2 / D8 | record before upload |
-| Right encoder A/B | D7 / D12 | record before upload |
-| L298N left IN1/IN2/ENA | D3 / D4 / D9 | record before upload |
-| L298N right IN1/IN2/ENB | D5 / D6 / D10 | record before upload |
-| MPU6050 SDA/SCL | A4 / A5 | record before upload |
+| Left encoder A/B | D2 / D8 | verified during preflight |
+| Right encoder A/B | D7 / D12 | verified during preflight |
+| L298N left IN1/IN2/ENA | D3 / D4 / D9 | verified forward raised-wheel test |
+| L298N right IN1/IN2/ENB | D5 / D6 / D10 | verified forward raised-wheel test |
+| MPU6050 SDA/SCL | A4 / A5 | verified MPU6050 test |
 
 All logic grounds must be common. Keep the vehicle raised whenever testing a
 new motor direction or unknown encoder wire.
@@ -52,10 +53,10 @@ new motor direction or unknown encoder wire.
    `R`, rotate exactly ten marked wheel turns in the forward direction, then
    send `D`. Set ticks/revolution to `absolute(count) / 10`. Record the A/B
    totals too; they should be similar.
-6. **Geometry and final approval** — measure loaded outside tyre diameter and
-   centre-to-centre track. F2 currently uses the preliminary values below and
-   permits G1 only. Refine them from repeated G1 floor tests, then set
-   `FOLLOWER2_FULL_PATH_CALIBRATION_APPROVED = true` before trying G2/G3.
+6. **Geometry and turn approval** — measure loaded outside tyre diameter and
+   centre-to-centre track. F2 uses the preliminary shared values below and
+   permits a monitored first G2 square. Measure its closure error before any
+   further path approval; G3 remains locked.
 
 ## Measurement record
 
@@ -76,10 +77,10 @@ new motor direction or unknown encoder wire.
 | Track width (mm) | 130, provisional | shared three-vehicle wheel-centre assumption |
 
 The standard autonomous target is `nanoatmega328_demo_square` in this branch.
-It powers on, waits for stillness, calibrates gyro-Z, resets pose and attempts
-the shared 700 mm G2 square once. F2 currently approves only G1, so the square
-demo deliberately calibrates then remains stopped until F2's own G2 turn test
-is approved; do not use that safety stop as a firmware fault.
+It powers on, waits for stillness, calibrates gyro-Z, resets pose and runs the
+shared 700 mm G2 square once. F2 permits this as one supervised first square,
+not a final demonstration approval; keep a physical motor-power stop within
+reach and leave G3 locked until the closure error is measured.
 
 ## 2026-09-06 first sensor/encoder result
 
@@ -94,20 +95,20 @@ test is the accepted direction result.
 The first shared geometry estimate is 65 mm wheel diameter and 130 mm track
 width. The user confirmed these physical dimensions are common to F1, F2 and
 L1; retain the values as provisional until repeated floor tests refine them.
-This enables G1 only; G2/G3 stay locked until the straight-line ground test is
-repeatable.
+This enables G1 and one supervised first 700 mm-square G2 calibration run; G3
+stays locked until the square's closure error is measured.
 
-## First F2 ground G1 procedure
+## F2 ground-test procedure
 
 1. Upload the current `follower2` branch and confirm the boot line says
    `FIRMWARE_PROFILE=F2`.
-2. Put the car on level ground with at least 1 m clear ahead and keep the
-   physical motor-power switch reachable.
-3. Send `C` while the vehicle is completely still, then send `R`, then `G1`.
-   Do not use F as a geometry test: F is open-loop equal PWM; G1 uses the wheel
+2. For the first straight check, use level ground with at least 1 m clear ahead.
+   Keep the physical motor-power switch reachable; send `C`, `R`, then `G1`.
+   Do not use F as a geometry test: F is open-loop equal PWM; G1 uses wheel
    controllers and gyro-Z heading correction.
-4. When it stops, send `P`. Measure actual travel from the same wheel/bumper
-   reference, the sideways offset and the final heading. Repeat three times.
-5. Share the three `P` lines plus the three physical measurements. We will tune
-   diameter from travel error first; only after G1 is consistent will we enable
-   G2/G3 and tune track width from turns.
+3. For the first square, clear at least a 2 m × 2 m area. In the full controller
+   send `C`, then `R`, then `G2`; it drives four 700 mm sides with four logical
+   left 90° turns. Stop with `S` or the motor-power switch if its path is unsafe.
+4. Record return-to-start distance, final heading and each visibly incorrect
+   turn. Tune wheel diameter from repeatable straight error first, then tune
+   track width from square closure. Do not unlock G3 yet.
