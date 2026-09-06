@@ -12,8 +12,8 @@ FIRMWARE_PROFILE=F2 (follower2 calibration pending)
 ```
 
 It supports all safe diagnostic commands (`I`, `C`, `T`, `R`, `D`, `F`, `B`,
-`M`, `P`) but blocks `G1`, `G2` and `G3` until its own calibration constants
-are explicitly approved in source code.
+`M`, `P`). The first measured values now enable a cautious `G1` only; `G2`
+and `G3` remain blocked until repeated ground tests confirm F2 geometry.
 
 ## Before upload: confirm the F2 pin map
 
@@ -53,9 +53,9 @@ new motor direction or unknown encoder wire.
    send `D`. Set ticks/revolution to `absolute(count) / 10`. Record the A/B
    totals too; they should be similar.
 6. **Geometry and final approval** — measure loaded outside tyre diameter and
-   centre-to-centre track. Put F2's own values in `src/main.cpp`, set
-   `FOLLOWER2_PATH_CALIBRATION_APPROVED = true`, compile, then begin with G1
-   floor tests. Do not try G2 until straight G1 is repeatable.
+   centre-to-centre track. F2 currently uses the preliminary values below and
+   permits G1 only. Refine them from repeated G1 floor tests, then set
+   `FOLLOWER2_FULL_PATH_CALIBRATION_APPROVED = true` before trying G2/G3.
 
 ## Measurement record
 
@@ -72,8 +72,8 @@ new motor direction or unknown encoder wire.
 | Right ticks/rev | 1237.4 | 12,374 / 10 marked forward turns |
 | Left A/B/invalid | 6081 / 6083 / 0 | 12,164 valid edges |
 | Right A/B/invalid | 6199 / 6187 / 0 | 12,386 valid edges |
-| Wheel diameter (mm) |  | loaded measurement |
-| Track width (mm) |  | wheel-centre measurement |
+| Wheel diameter (mm) | 65, provisional | approximate outside measurement |
+| Track width (mm) | 128, provisional | approximate wheel-centre measurement |
 
 After this record is complete, create `follower2-demo` from the approved F2
 branch. Its autonomous sequence will be the same pattern as Follower 1 demo:
@@ -89,5 +89,21 @@ counts, confirming the right decoder inversion above. The first `F` command
 showed no encoder motion, so its result was excluded; the subsequent moving
 test is the accepted direction result.
 
-Paths remain locked because Follower 2's loaded wheel diameter and track width
-still need measurement, followed by a cautious ground G1 test.
+The first geometry estimate is 65 mm wheel diameter and 128 mm track width.
+This enables G1 only; G2/G3 stay locked until the straight-line ground test is
+repeatable.
+
+## First F2 ground G1 procedure
+
+1. Upload the current `follower2` branch and confirm the boot line says
+   `FIRMWARE_PROFILE=F2`.
+2. Put the car on level ground with at least 1 m clear ahead and keep the
+   physical motor-power switch reachable.
+3. Send `C` while the vehicle is completely still, then send `R`, then `G1`.
+   Do not use F as a geometry test: F is open-loop equal PWM; G1 uses the wheel
+   controllers and gyro-Z heading correction.
+4. When it stops, send `P`. Measure actual travel from the same wheel/bumper
+   reference, the sideways offset and the final heading. Repeat three times.
+5. Share the three `P` lines plus the three physical measurements. We will tune
+   diameter from travel error first; only after G1 is consistent will we enable
+   G2/G3 and tune track width from turns.

@@ -34,13 +34,14 @@ constexpr uint8_t MPU6050_SDA_PIN = A4;
 constexpr uint8_t MPU6050_SCL_PIN = A5;
 
 // ---------------------------------------------------------------------------
-// Follower 2 calibration starts unapproved. The values below are only nominal
-// references for displaying diagnostics; no path can start until its own pin,
-// direction, tick and geometry measurements have been recorded and approved.
-// Tick counts use this program's 4x AB-quadrature decoder.
+// Follower 2 has enough measured data for a cautious first straight G1 test.
+// Its geometry is still approximate, so G2/G3 remain blocked until repeatable
+// ground results have confirmed the wheel diameter and track width. Tick counts
+// use this program's 4x AB-quadrature decoder.
 // ---------------------------------------------------------------------------
 constexpr float PI_F = 3.14159265358979323846f;
-constexpr bool FOLLOWER2_PATH_CALIBRATION_APPROVED = false;
+constexpr bool FOLLOWER2_G1_GROUND_TEST_ENABLED = true;
+constexpr bool FOLLOWER2_FULL_PATH_CALIBRATION_APPROVED = false;
 
 // follower2, 2026-09-06: exact 10 marked forward wheel revolutions yielded
 // 12,162 left and 12,374 right decoded counts. These are 4x AB-quadrature
@@ -48,9 +49,10 @@ constexpr bool FOLLOWER2_PATH_CALIBRATION_APPROVED = false;
 constexpr float LEFT_TICKS_PER_WHEEL_REVOLUTION = 1216.2f;
 constexpr float RIGHT_TICKS_PER_WHEEL_REVOLUTION = 1237.4f;
 
-// TEMPORARY ONLY: measure Follower 2's outside tyre diameter and wheel track.
+// Provisional Follower 2 geometry from the first physical measurement. Refine
+// from repeated G1 ground tests before enabling paths containing turns.
 constexpr float WHEEL_DIAMETER_MM = 65.0f;
-constexpr float WHEEL_TRACK_MM = 130.0f;
+constexpr float WHEEL_TRACK_MM = 128.0f;
 
 constexpr float LEFT_TICKS_PER_MM =
     LEFT_TICKS_PER_WHEEL_REVOLUTION / (PI_F * WHEEL_DIAMETER_MM);
@@ -1077,8 +1079,12 @@ bool selectPresetPath(uint8_t pathNumber) {
 }
 
 void startPresetPath(uint8_t pathNumber) {
-  if (!FOLLOWER2_PATH_CALIBRATION_APPROVED) {
-    Serial.println(F("Path blocked: Follower 2 parameters are pending. Complete its calibration record first."));
+  if (!FOLLOWER2_G1_GROUND_TEST_ENABLED) {
+    Serial.println(F("Path blocked: Follower 2 needs G1 calibration approval first."));
+    return;
+  }
+  if (pathNumber != 1 && !FOLLOWER2_FULL_PATH_CALIBRATION_APPROVED) {
+    Serial.println(F("Path blocked: Follower 2 provisional geometry permits G1 only."));
     return;
   }
   if (!imuPresent || !imuCalibrated) {
@@ -1442,7 +1448,7 @@ void printStatus() {
 
 void printHelp() {
   Serial.println(F("Follower 2 calibration controller ready. Motors are stopped after boot."));
-  Serial.println(F("G paths are locked until Follower 2 parameters are approved."));
+  Serial.println(F("Follower 2 provisional geometry: G1 enabled; G2/G3 locked."));
   Serial.println(F("Commands:"));
   Serial.println(F("  F / B       manual forward / backward PWM 80 (1.2 s max)"));
   Serial.println(F("  M<L>,<R>    manual PWM, e.g. M80,80 or M-80,80"));
