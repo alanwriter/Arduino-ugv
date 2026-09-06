@@ -109,7 +109,14 @@ stays locked until the square's closure error is measured.
    controllers and gyro-Z heading correction.
 3. For the first square, clear at least a 2 m × 2 m area. In the full controller
    send `C`, then `R`, then `G2`; it drives four 700 mm sides with four logical
-   left 90° turns. Stop with `S` or the motor-power switch if its path is unsafe.
+   left 90° turns. During every turn, capture the automatic 500 ms
+   `turn[target_deg=...,fused_deg=...,encoder_deg=...,gyro_deg=...]` status
+   lines. Stop with `S` or the motor-power switch if its path is unsafe.
 4. Record return-to-start distance, final heading and each visibly incorrect
-   turn. Tune wheel diameter from repeatable straight error first, then tune
-   track width from square closure. Do not unlock G3 yet.
+   turn. If `encoder_deg` and `gyro_deg` diverge strongly, re-run `D` before
+   tuning: an A/B phase near zero is a connector/wire fault. If they agree but
+   the vehicle still turns too far or too little, investigate caster drag,
+   wheel slip and stopping inertia before changing the geometry. If
+   `imu_consecutive_failures` rises while moving, inspect MPU wiring/power.
+   Tune wheel diameter from repeatable straight error first, then tune track
+   width from square closure. Do not unlock G3 yet.
