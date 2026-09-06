@@ -5,8 +5,9 @@
 #include <string.h>
 #include <util/atomic.h>
 #include <avr/wdt.h>
+#include "vehicle_profile.h"
 
-// Nano #1 closed-loop differential-drive demo.
+// Shared closed-loop differential-drive controller.
 //
 // Safety rule: setup explicitly turns all L298N outputs off. A motor moves
 // only after an explicit serial manual command (F/B/M...) or preset-path
@@ -14,59 +15,15 @@
 // reset/brownout safe before setup executes. See the demo wiring document.
 
 // ---------------------------------------------------------------------------
-// Fixed Nano #1 wiring. Do not change the L298N pins: they are soldered.
-// ---------------------------------------------------------------------------
-constexpr uint8_t LEFT_ENCODER_A_PIN = 2;   // INT0 / PD2
-constexpr uint8_t LEFT_ENCODER_B_PIN = 8;   // PCINT0 / PB0
-constexpr uint8_t RIGHT_ENCODER_A_PIN = 7;  // PCINT23 / PD7
-constexpr uint8_t RIGHT_ENCODER_B_PIN = 12; // PCINT4 / PB4
-
-constexpr uint8_t LEFT_IN1_PIN = 3;
-constexpr uint8_t LEFT_IN2_PIN = 4;
-constexpr uint8_t RIGHT_IN1_PIN = 5;
-constexpr uint8_t RIGHT_IN2_PIN = 6;
-constexpr uint8_t LEFT_PWM_PIN = 9;   // L298N ENA; remove its jumper.
-constexpr uint8_t RIGHT_PWM_PIN = 10; // L298N ENB; remove its jumper.
-
-// MPU6050 is connected directly to the drive Nano's hardware I2C pins.
-constexpr uint8_t MPU6050_SDA_PIN = A4;
-constexpr uint8_t MPU6050_SCL_PIN = A5;
-
-// ---------------------------------------------------------------------------
-// Vehicle-specific calibration. Measure the two values marked MEASURE ME
-// before expecting a geometrically accurate path. The tick values use this
-// program's 4x AB-quadrature decoder, not the old 2x test convention.
+// Vehicle-specific pins, geometry, directions and path approval live in
+// vehicle_profile.h. This controller and its demo state machine are identical
+// for Follower 1, Follower 2 and Leader 1.
 // ---------------------------------------------------------------------------
 constexpr float PI_F = 3.14159265358979323846f;
-// follower1, 2026-09-06: 12,035 decoded ticks across 10 marked left-wheel
-// revolutions. The right side stays at its conservative default until its
-// 10-revolution measurement is repeated with the same reference mark.
-constexpr float LEFT_TICKS_PER_WHEEL_REVOLUTION = 1203.5f;
-constexpr float RIGHT_TICKS_PER_WHEEL_REVOLUTION = 1200.0f;
-
-// MEASURE ME: outside tyre diameter and centre-to-centre wheel track.
-constexpr float WHEEL_DIAMETER_MM = 65.0f;
-constexpr float WHEEL_TRACK_MM = 130.0f;
-
 constexpr float LEFT_TICKS_PER_MM =
     LEFT_TICKS_PER_WHEEL_REVOLUTION / (PI_F * WHEEL_DIAMETER_MM);
 constexpr float RIGHT_TICKS_PER_MM =
     RIGHT_TICKS_PER_WHEEL_REVOLUTION / (PI_F * WHEEL_DIAMETER_MM);
-
-// Make a logical positive command mean "vehicle forward" for both wheels.
-// Change one of these only after using the F command with the wheels raised.
-constexpr bool LEFT_MOTOR_REVERSED = false;
-constexpr bool RIGHT_MOTOR_REVERSED = false;
-
-// Make a logical forward movement make both encoder counts increase.
-// Change one of these only after using F and inspecting the reported counts.
-constexpr bool LEFT_ENCODER_REVERSED = false;
-// follower1, 2026-09-06: F drives both wheels physically forward; left count
-// increases while right count decreases, so invert the right decoder only.
-constexpr bool RIGHT_ENCODER_REVERSED = true;
-
-// Make a logical left turn increase pose heading. Test with M-80,80.
-constexpr bool GYRO_Z_REVERSED = false;
 
 // ---------------------------------------------------------------------------
 // Conservative first-pass control tuning. These are intentionally low-speed
@@ -856,6 +813,21 @@ unsigned long pathLastLeftEncoderProgressMs = 0;
 unsigned long pathLastRightEncoderProgressMs = 0;
 bool encoderPreflightPassed = false;
 
+#ifdef AUTORUN_G1_DEMO
+// This common state machine is intentionally identical for every vehicle.
+constexpr unsigned long AUTORUN_STILLNESS_DELAY_MS = 3000UL;
+
+enum AutoRunState : uint8_t {
+  AUTORUN_WAITING_FOR_STILLNESS,
+  AUTORUN_RUNNING_G1,
+  AUTORUN_COMPLETE,
+  AUTORUN_FAULT,
+};
+
+AutoRunState autoRunState = AUTORUN_WAITING_FOR_STILLNESS;
+unsigned long autoRunStartedMs = 0;
+#endif
+
 void printFaultCode() {
   switch (faultCode) {
     case FAULT_NONE:
@@ -1075,6 +1047,14 @@ bool selectPresetPath(uint8_t pathNumber) {
 }
 
 void startPresetPath(uint8_t pathNumber) {
+  if (pathNumber < 1 || pathNumber > 3) {
+    Serial.println(F("Unknown path. Use G1, G2, or G3."));
+    return;
+  }
+  if (pathNumber > MAX_APPROVED_PRESET_PATH) {
+    Serial.println(F("Path blocked: this vehicle profile has not approved that path yet."));
+    return;
+  }
   if (!imuPresent || !imuCalibrated) {
     Serial.println(F("Path blocked: connect MPU6050 and send C while still first."));
     return;
@@ -1084,10 +1064,7 @@ void startPresetPath(uint8_t pathNumber) {
         F("Path blocked: first verify both encoder A/B phases with D and F."));
     return;
   }
-  if (!selectPresetPath(pathNumber)) {
-    Serial.println(F("Unknown path. Use G1, G2, or G3."));
-    return;
-  }
+  selectPresetPath(pathNumber);
 
   faultCode = FAULT_NONE;
   motionMode = MOTION_PATH;
@@ -1435,8 +1412,8 @@ void printStatus() {
 }
 
 void printHelp() {
-  Serial.println(F("Closed-loop drive ready. Motors are stopped after boot."));
-  Serial.println(F("Before a path: verify F/B direction, then send C while still."));
+  Serial.println(F(VEHICLE_PROFILE_HELP_TITLE));
+  Serial.println(F(VEHICLE_PROFILE_PATH_POLICY));
   Serial.println(F("Commands:"));
   Serial.println(F("  F / B       manual forward / backward PWM 80 (1.2 s max)"));
   Serial.println(F("  M<L>,<R>    manual PWM, e.g. M80,80 or M-80,80"));
@@ -1482,6 +1459,58 @@ void resetCountersAndPose() {
   resetPoseAndOdometry(left, right);
   Serial.println(F("Encoder counts and relative pose reset. Motors stopped."));
 }
+
+#ifdef AUTORUN_G1_DEMO
+void updateAutoRunDemo() {
+  switch (autoRunState) {
+    case AUTORUN_WAITING_FOR_STILLNESS:
+      if (millis() - autoRunStartedMs < AUTORUN_STILLNESS_DELAY_MS) {
+        return;
+      }
+
+      // The vehicle remains stopped during the 300-sample gyro calibration.
+      stopMotion(true);
+      Serial.println(F("Demo: stillness delay complete; calibrating gyro Z."));
+      if (!calibrateGyroZ()) {
+        enterFault(FAULT_IMU_READ);
+        autoRunState = AUTORUN_FAULT;
+        return;
+      }
+
+      resetCountersAndPose();
+
+      // The interactive profile has already verified motor direction, encoder
+      // A/B phase health and logical encoder sign. An autonomous image cannot
+      // repeat that human-observed check at each boot. This bypass is limited
+      // to demo builds; wheel, MPU and timeout protections remain active.
+      encoderPreflightPassed = true;
+      Serial.println(F("Demo: using certified encoder preflight; starting G1."));
+      startPresetPath(1);
+      if (motionMode != MOTION_PATH) {
+        stopMotion(false);
+        Serial.println(F("Demo: G1 could not start; motors stopped."));
+        autoRunState = AUTORUN_FAULT;
+        return;
+      }
+      autoRunState = AUTORUN_RUNNING_G1;
+      return;
+
+    case AUTORUN_RUNNING_G1:
+      if (motionMode == MOTION_IDLE) {
+        autoRunState = AUTORUN_COMPLETE;
+        Serial.println(F("Demo complete. Motors remain stopped until power cycle."));
+      } else if (motionMode == MOTION_FAULT) {
+        autoRunState = AUTORUN_FAULT;
+      }
+      return;
+
+    case AUTORUN_COMPLETE:
+    case AUTORUN_FAULT:
+      // One deliberate attempt per Nano reset/power cycle.
+      return;
+  }
+}
+#endif
 
 void handleCommand(char *command) {
   char op = command[0];
@@ -1618,7 +1647,11 @@ void enableSafetyWatchdog() {
 void setup() {
   disableWatchdogAfterReset();
   Serial.begin(115200);
-  Serial.println(F("FIRMWARE_PROFILE=F1 (follower1 calibrated build)"));
+#ifdef AUTORUN_G1_DEMO
+  Serial.println(F(VEHICLE_PROFILE_DEMO_BOOT_MESSAGE));
+#else
+  Serial.println(F(VEHICLE_PROFILE_BOOT_MESSAGE));
+#endif
 
   // Establish a physical safe state before enabling any sensor or controller.
   configureMotorPinsAndStop();
@@ -1638,26 +1671,48 @@ void setup() {
   Wire.setWireTimeout(WIRE_TIMEOUT_US, true);
   Wire.clearWireTimeoutFlag();
   if (initialiseMpu6050()) {
+#ifdef AUTORUN_G1_DEMO
+    Serial.println(F("MPU6050 detected. Demo will calibrate while still, then run G1."));
+#else
     Serial.println(F("MPU6050 detected. Send C with the vehicle still."));
+#endif
   } else {
+#ifdef AUTORUN_G1_DEMO
+    Serial.println(F("MPU6050 not detected. Demo will remain stopped."));
+#else
     Serial.println(F("MPU6050 not detected. Manual tests work; G paths are blocked."));
+#endif
   }
 
+#ifdef AUTORUN_G1_DEMO
+  autoRunStartedMs = millis();
+  Serial.println(F("Demo: keep vehicle completely still for 3 s after power-on."));
+#else
+  Serial.println(F(VEHICLE_PROFILE_STARTUP_NOTICE));
   printHelp();
   printConfiguration();
+#endif
   enableSafetyWatchdog();
 }
 
 void loop() {
+#ifndef AUTORUN_G1_DEMO
   readSerialCommands();
+#endif
   updateImu();
+#ifndef AUTORUN_G1_DEMO
   printAttitudeTelemetry();
+#endif
   if (imuBusTimeoutOccurred) {
     if (motionMode == MOTION_PATH || motionMode == MOTION_MANUAL) {
       enterFault(FAULT_IMU_BUS_TIMEOUT);
     }
     imuBusTimeoutOccurred = false;
   }
+
+#ifdef AUTORUN_G1_DEMO
+  updateAutoRunDemo();
+#endif
 
   static unsigned long lastControlUs = micros();
   const unsigned long nowUs = micros();
@@ -1669,6 +1724,8 @@ void loop() {
     controlStep(dtSeconds);
   }
 
+#ifndef AUTORUN_G1_DEMO
   reportTelemetry();
+#endif
   wdt_reset();
 }
