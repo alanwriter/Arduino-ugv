@@ -13,7 +13,7 @@
 #define VEHICLE_PROFILE_BOOT_MESSAGE \
   "FIRMWARE_PROFILE=F1 (follower1 calibrated build)"
 #define VEHICLE_PROFILE_DEMO_BOOT_MESSAGE \
-  "FIRMWARE_PROFILE=F1-DEMO (one-shot autonomous G1)"
+  "FIRMWARE_PROFILE=F1-DEMO (one-shot autonomous preset path)"
 #define VEHICLE_PROFILE_STARTUP_NOTICE \
   "F1: use C while still before a path; verify any changed wiring first."
 
