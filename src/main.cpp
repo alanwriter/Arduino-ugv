@@ -6,7 +6,7 @@
 #include <util/atomic.h>
 #include <avr/wdt.h>
 
-// Nano #1 closed-loop differential-drive demo.
+// Follower 2 closed-loop differential-drive calibration profile.
 //
 // Safety rule: setup explicitly turns all L298N outputs off. A motor moves
 // only after an explicit serial manual command (F/B/M...) or preset-path
@@ -14,7 +14,8 @@
 // reset/brownout safe before setup executes. See the demo wiring document.
 
 // ---------------------------------------------------------------------------
-// Fixed Nano #1 wiring. Do not change the L298N pins: they are soldered.
+// Temporary Follower 1 reference wiring. Confirm every Follower 2 connection
+// before uploading this profile, then replace values here if its wiring differs.
 // ---------------------------------------------------------------------------
 constexpr uint8_t LEFT_ENCODER_A_PIN = 2;   // INT0 / PD2
 constexpr uint8_t LEFT_ENCODER_B_PIN = 8;   // PCINT0 / PB0
@@ -33,18 +34,19 @@ constexpr uint8_t MPU6050_SDA_PIN = A4;
 constexpr uint8_t MPU6050_SCL_PIN = A5;
 
 // ---------------------------------------------------------------------------
-// Vehicle-specific calibration. Measure the two values marked MEASURE ME
-// before expecting a geometrically accurate path. The tick values use this
-// program's 4x AB-quadrature decoder, not the old 2x test convention.
+// Follower 2 calibration starts unapproved. The values below are only nominal
+// references for displaying diagnostics; no path can start until its own pin,
+// direction, tick and geometry measurements have been recorded and approved.
+// Tick counts use this program's 4x AB-quadrature decoder.
 // ---------------------------------------------------------------------------
 constexpr float PI_F = 3.14159265358979323846f;
-// follower1, 2026-09-06: 12,035 decoded ticks across 10 marked left-wheel
-// revolutions. The right side stays at its conservative default until its
-// 10-revolution measurement is repeated with the same reference mark.
-constexpr float LEFT_TICKS_PER_WHEEL_REVOLUTION = 1203.5f;
+constexpr bool FOLLOWER2_PATH_CALIBRATION_APPROVED = false;
+
+// TEMPORARY ONLY: replace each value from Follower 2's own 10-turn test.
+constexpr float LEFT_TICKS_PER_WHEEL_REVOLUTION = 1200.0f;
 constexpr float RIGHT_TICKS_PER_WHEEL_REVOLUTION = 1200.0f;
 
-// MEASURE ME: outside tyre diameter and centre-to-centre wheel track.
+// TEMPORARY ONLY: measure Follower 2's outside tyre diameter and wheel track.
 constexpr float WHEEL_DIAMETER_MM = 65.0f;
 constexpr float WHEEL_TRACK_MM = 130.0f;
 
@@ -53,17 +55,13 @@ constexpr float LEFT_TICKS_PER_MM =
 constexpr float RIGHT_TICKS_PER_MM =
     RIGHT_TICKS_PER_WHEEL_REVOLUTION / (PI_F * WHEEL_DIAMETER_MM);
 
-// Make a logical positive command mean "vehicle forward" for both wheels.
-// Change one of these only after using the F command with the wheels raised.
+// Follower 2 starts with no assumed motor/encoder sign. Establish each value
+// from its raised-wheel F test, then update this profile.
 constexpr bool LEFT_MOTOR_REVERSED = false;
 constexpr bool RIGHT_MOTOR_REVERSED = false;
 
-// Make a logical forward movement make both encoder counts increase.
-// Change one of these only after using F and inspecting the reported counts.
 constexpr bool LEFT_ENCODER_REVERSED = false;
-// follower1, 2026-09-06: F drives both wheels physically forward; left count
-// increases while right count decreases, so invert the right decoder only.
-constexpr bool RIGHT_ENCODER_REVERSED = true;
+constexpr bool RIGHT_ENCODER_REVERSED = false;
 
 // Make a logical left turn increase pose heading. Test with M-80,80.
 constexpr bool GYRO_Z_REVERSED = false;
@@ -1075,6 +1073,10 @@ bool selectPresetPath(uint8_t pathNumber) {
 }
 
 void startPresetPath(uint8_t pathNumber) {
+  if (!FOLLOWER2_PATH_CALIBRATION_APPROVED) {
+    Serial.println(F("Path blocked: Follower 2 parameters are pending. Complete its calibration record first."));
+    return;
+  }
   if (!imuPresent || !imuCalibrated) {
     Serial.println(F("Path blocked: connect MPU6050 and send C while still first."));
     return;
@@ -1435,8 +1437,8 @@ void printStatus() {
 }
 
 void printHelp() {
-  Serial.println(F("Closed-loop drive ready. Motors are stopped after boot."));
-  Serial.println(F("Before a path: verify F/B direction, then send C while still."));
+  Serial.println(F("Follower 2 calibration controller ready. Motors are stopped after boot."));
+  Serial.println(F("G paths are locked until Follower 2 parameters are approved."));
   Serial.println(F("Commands:"));
   Serial.println(F("  F / B       manual forward / backward PWM 80 (1.2 s max)"));
   Serial.println(F("  M<L>,<R>    manual PWM, e.g. M80,80 or M-80,80"));
@@ -1618,7 +1620,7 @@ void enableSafetyWatchdog() {
 void setup() {
   disableWatchdogAfterReset();
   Serial.begin(115200);
-  Serial.println(F("FIRMWARE_PROFILE=F1 (follower1 calibrated build)"));
+  Serial.println(F("FIRMWARE_PROFILE=F2 (follower2 calibration pending)"));
 
   // Establish a physical safe state before enabling any sensor or controller.
   configureMotorPinsAndStop();
@@ -1643,6 +1645,7 @@ void setup() {
     Serial.println(F("MPU6050 not detected. Manual tests work; G paths are blocked."));
   }
 
+  Serial.println(F("F2: verify pin map and record MPU/encoder data before enabling paths."));
   printHelp();
   printConfiguration();
   enableSafetyWatchdog();
