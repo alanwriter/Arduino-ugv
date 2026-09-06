@@ -360,6 +360,9 @@ float accelerometerZG = 0.0f;
 float accelerometerRollDegrees = 0.0f;
 float accelerometerPitchDegrees = 0.0f;
 float gyroDeltaSinceOdometry = 0.0f;
+// Diagnostic-only gyro integration, reset with the relative pose. The path
+// controller continues to use pose.headingRad below.
+float gyroHeadingRelativeRad = 0.0f;
 unsigned int imuReadFailures = 0;
 unsigned int consecutiveImuReadFailures = 0;
 unsigned long lastImuUpdateUs = 0;
@@ -506,6 +509,7 @@ bool calibrateGyroZ() {
   gyroZDegreesPerSecond = 0.0f;
   attitudeYawRelativeDegrees = 0.0f;
   gyroDeltaSinceOdometry = 0.0f;
+  gyroHeadingRelativeRad = 0.0f;
   imuCalibrated = true;
   consecutiveImuReadFailures = 0;
   imuBusTimeoutOccurred = false;
@@ -617,6 +621,9 @@ WheelController leftController = {0, 0.0f, 0.0f, 0.0f, 0.0f, 0};
 WheelController rightController = {0, 0.0f, 0.0f, 0.0f, 0.0f, 0};
 long odometryLastLeftCount = 0;
 long odometryLastRightCount = 0;
+// These two values are observability channels only. They preserve the raw
+// encoder and gyro heading integrations that are blended into pose.headingRad.
+float encoderHeadingRelativeRad = 0.0f;
 MotionMode motionMode = MOTION_IDLE;
 FaultCode faultCode = FAULT_NONE;
 int manualLeftPwm = 0;
@@ -743,11 +750,17 @@ void updateOdometry(long leftCount, long rightCount) {
   const float forwardDeltaMm = (leftDeltaMm + rightDeltaMm) * 0.5f;
   const float encoderHeadingDelta =
       (rightDeltaMm - leftDeltaMm) / WHEEL_TRACK_MM;
+  const float gyroHeadingDelta = gyroDeltaSinceOdometry;
+
+  // Keep the independent integrations visible during a turn. Do not use these
+  // values to change motion control; pose.headingRad remains the fused source.
+  encoderHeadingRelativeRad += encoderHeadingDelta;
+  gyroHeadingRelativeRad += gyroHeadingDelta;
 
   float headingDelta = encoderHeadingDelta;
   if (imuCalibrated) {
     headingDelta = (1.0f - IMU_GYRO_BLEND) * encoderHeadingDelta +
-                   IMU_GYRO_BLEND * gyroDeltaSinceOdometry;
+                   IMU_GYRO_BLEND * gyroHeadingDelta;
   }
   gyroDeltaSinceOdometry = 0.0f;
 
@@ -764,6 +777,8 @@ void resetPoseAndOdometry(const EncoderSnapshot &left,
   pose.headingRad = 0.0f;
   odometryLastLeftCount = left.count;
   odometryLastRightCount = right.count;
+  encoderHeadingRelativeRad = 0.0f;
+  gyroHeadingRelativeRad = 0.0f;
   gyroDeltaSinceOdometry = 0.0f;
 }
 
@@ -1399,6 +1414,32 @@ void printConfiguration() {
   Serial.println(TURN_PWM_BIAS);
 }
 
+void printActiveTurnDiagnostics() {
+  if (!activePathStepIsTurn()) {
+    return;
+  }
+
+  const float degreesPerRadian = 180.0f / PI_F;
+  const float headingErrorRad = pathTargetHeadingRad - pose.headingRad;
+  Serial.print(F(",turn[target_deg="));
+  Serial.print(pathTargetHeadingRad * degreesPerRadian, 1);
+  Serial.print(F(",fused_deg="));
+  Serial.print(pose.headingRad * degreesPerRadian, 1);
+  Serial.print(F(",encoder_deg="));
+  Serial.print(encoderHeadingRelativeRad * degreesPerRadian, 1);
+  Serial.print(F(",gyro_deg="));
+  Serial.print(gyroHeadingRelativeRad * degreesPerRadian, 1);
+  Serial.print(F(",error_deg="));
+  Serial.print(headingErrorRad * degreesPerRadian, 1);
+  Serial.print(F(",gyro_z_dps="));
+  Serial.print(gyroZDegreesPerSecond, 1);
+  Serial.print(F(",imu_consecutive_failures="));
+  Serial.print(consecutiveImuReadFailures);
+  Serial.print(F(",phase="));
+  Serial.print(pathSettling ? F("settle") : F("turn"));
+  Serial.print(F("]"));
+}
+
 void printStatus() {
   EncoderSnapshot left;
   EncoderSnapshot right;
@@ -1437,6 +1478,7 @@ void printStatus() {
     Serial.print(activePathNumber);
     Serial.print(F(",step="));
     Serial.print(pathStepIndex + 1);
+    printActiveTurnDiagnostics();
   }
   Serial.println();
 }
