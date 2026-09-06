@@ -46,6 +46,8 @@ constexpr bool RIGHT_MOTOR_REVERSED = false;
 constexpr bool LEFT_ENCODER_REVERSED = false;
 constexpr bool RIGHT_ENCODER_REVERSED = true;
 constexpr bool GYRO_Z_REVERSED = false;
+// F1's calibrated turns need no additional path-turn output bias.
+constexpr int TURN_PWM_BIAS = 0;
 
 // F1's current full profile can use all supplied preset paths.
 constexpr uint8_t MAX_APPROVED_PRESET_PATH = 3;
