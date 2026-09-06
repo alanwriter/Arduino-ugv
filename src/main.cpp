@@ -856,22 +856,22 @@ unsigned long pathLastLeftEncoderProgressMs = 0;
 unsigned long pathLastRightEncoderProgressMs = 0;
 bool encoderPreflightPassed = false;
 
-#ifdef F2_AUTORUN_G1
-// F2 is intentionally a separate build target: after a short stillness delay
+#ifdef FOLLOWER1_AUTORUN_G1
+// Follower 1 demo is intentionally a separate build target: after a short stillness delay
 // it calibrates yaw, resets its relative pose, runs G1 once, then remains
 // stopped until the next power cycle.  The normal F1 build never compiles this
 // state machine.
-constexpr unsigned long F2_AUTORUN_STILLNESS_DELAY_MS = 3000UL;
+constexpr unsigned long FOLLOWER1_AUTORUN_STILLNESS_DELAY_MS = 3000UL;
 
-enum F2AutoRunState : uint8_t {
-  F2_WAITING_FOR_STILLNESS,
-  F2_RUNNING_G1,
-  F2_COMPLETE,
-  F2_FAULT,
+enum Follower1AutoRunState : uint8_t {
+  FOLLOWER1_WAITING_FOR_STILLNESS,
+  FOLLOWER1_RUNNING_G1,
+  FOLLOWER1_COMPLETE,
+  FOLLOWER1_FAULT,
 };
 
-F2AutoRunState f2AutoRunState = F2_WAITING_FOR_STILLNESS;
-unsigned long f2AutoRunStartedMs = 0;
+Follower1AutoRunState follower1AutoRunState = FOLLOWER1_WAITING_FOR_STILLNESS;
+unsigned long follower1AutoRunStartedMs = 0;
 #endif
 
 void printFaultCode() {
@@ -1501,53 +1501,54 @@ void resetCountersAndPose() {
   Serial.println(F("Encoder counts and relative pose reset. Motors stopped."));
 }
 
-#ifdef F2_AUTORUN_G1
-void updateF2AutoRun() {
-  switch (f2AutoRunState) {
-    case F2_WAITING_FOR_STILLNESS:
-      if (millis() - f2AutoRunStartedMs < F2_AUTORUN_STILLNESS_DELAY_MS) {
+#ifdef FOLLOWER1_AUTORUN_G1
+void updateFollower1AutoRun() {
+  switch (follower1AutoRunState) {
+    case FOLLOWER1_WAITING_FOR_STILLNESS:
+      if (millis() - follower1AutoRunStartedMs <
+          FOLLOWER1_AUTORUN_STILLNESS_DELAY_MS) {
         return;
       }
 
       // This also keeps motor output at zero during the 300 gyro samples.
       stopMotion(true);
-      Serial.println(F("F2: stillness delay complete; calibrating gyro Z."));
+      Serial.println(F("F1 demo: stillness delay complete; calibrating gyro Z."));
       if (!calibrateGyroZ()) {
         enterFault(FAULT_IMU_READ);
-        f2AutoRunState = F2_FAULT;
+        follower1AutoRunState = FOLLOWER1_FAULT;
         return;
       }
 
       resetCountersAndPose();
 
-      // F2 is only flashed after F1 has proved that both A/B encoder phases
+      // This image is only flashed after F1 has proved that both A/B encoder phases
       // work and that logical forward produces increasing counts.  An
       // autonomous power-on demo cannot perform that human-observed test, so
-      // this is a compile-time F2-only certification bypass.  The runtime
+      // this is a compile-time Follower-1-demo-only certification bypass. The runtime
       // wheel-progress, timeout and MPU failure protections remain enabled.
       encoderPreflightPassed = true;
-      Serial.println(F("F2: using F1-certified encoder preflight; starting G1."));
+      Serial.println(F("F1 demo: using F1-certified encoder preflight; starting G1."));
       startPresetPath(1);
       if (motionMode != MOTION_PATH) {
         stopMotion(false);
-        Serial.println(F("F2: G1 could not start; motors stopped."));
-        f2AutoRunState = F2_FAULT;
+        Serial.println(F("F1 demo: G1 could not start; motors stopped."));
+        follower1AutoRunState = FOLLOWER1_FAULT;
         return;
       }
-      f2AutoRunState = F2_RUNNING_G1;
+      follower1AutoRunState = FOLLOWER1_RUNNING_G1;
       return;
 
-    case F2_RUNNING_G1:
+    case FOLLOWER1_RUNNING_G1:
       if (motionMode == MOTION_IDLE) {
-        f2AutoRunState = F2_COMPLETE;
-        Serial.println(F("F2 complete. Motors remain stopped until power cycle."));
+        follower1AutoRunState = FOLLOWER1_COMPLETE;
+        Serial.println(F("F1 demo complete. Motors remain stopped until power cycle."));
       } else if (motionMode == MOTION_FAULT) {
-        f2AutoRunState = F2_FAULT;
+        follower1AutoRunState = FOLLOWER1_FAULT;
       }
       return;
 
-    case F2_COMPLETE:
-    case F2_FAULT:
+    case FOLLOWER1_COMPLETE:
+    case FOLLOWER1_FAULT:
       // One-shot means exactly one attempt per Nano reset/power cycle.
       return;
   }
@@ -1689,8 +1690,8 @@ void enableSafetyWatchdog() {
 void setup() {
   disableWatchdogAfterReset();
   Serial.begin(115200);
-#ifdef F2_AUTORUN_G1
-  Serial.println(F("FIRMWARE_PROFILE=F2 (one-shot autonomous G1)"));
+#ifdef FOLLOWER1_AUTORUN_G1
+  Serial.println(F("FIRMWARE_PROFILE=F1-DEMO (one-shot autonomous G1)"));
 #else
   Serial.println(F("FIRMWARE_PROFILE=F1 (follower1 calibrated build)"));
 #endif
@@ -1713,22 +1714,22 @@ void setup() {
   Wire.setWireTimeout(WIRE_TIMEOUT_US, true);
   Wire.clearWireTimeoutFlag();
   if (initialiseMpu6050()) {
-#ifdef F2_AUTORUN_G1
-    Serial.println(F("MPU6050 detected. F2 will calibrate while still, then run G1."));
+#ifdef FOLLOWER1_AUTORUN_G1
+    Serial.println(F("MPU6050 detected. F1 demo will calibrate while still, then run G1."));
 #else
     Serial.println(F("MPU6050 detected. Send C with the vehicle still."));
 #endif
   } else {
-#ifdef F2_AUTORUN_G1
-    Serial.println(F("MPU6050 not detected. F2 will remain stopped."));
+#ifdef FOLLOWER1_AUTORUN_G1
+    Serial.println(F("MPU6050 not detected. F1 demo will remain stopped."));
 #else
     Serial.println(F("MPU6050 not detected. Manual tests work; G paths are blocked."));
 #endif
   }
 
-#ifdef F2_AUTORUN_G1
-  f2AutoRunStartedMs = millis();
-  Serial.println(F("F2: keep vehicle completely still for 3 s after power-on."));
+#ifdef FOLLOWER1_AUTORUN_G1
+  follower1AutoRunStartedMs = millis();
+  Serial.println(F("F1 demo: keep vehicle completely still for 3 s after power-on."));
 #else
   printHelp();
   printConfiguration();
@@ -1737,11 +1738,11 @@ void setup() {
 }
 
 void loop() {
-#ifndef F2_AUTORUN_G1
+#ifndef FOLLOWER1_AUTORUN_G1
   readSerialCommands();
 #endif
   updateImu();
-#ifndef F2_AUTORUN_G1
+#ifndef FOLLOWER1_AUTORUN_G1
   printAttitudeTelemetry();
 #endif
   if (imuBusTimeoutOccurred) {
@@ -1751,8 +1752,8 @@ void loop() {
     imuBusTimeoutOccurred = false;
   }
 
-#ifdef F2_AUTORUN_G1
-  updateF2AutoRun();
+#ifdef FOLLOWER1_AUTORUN_G1
+  updateFollower1AutoRun();
 #endif
 
   static unsigned long lastControlUs = micros();
@@ -1765,7 +1766,7 @@ void loop() {
     controlStep(dtSeconds);
   }
 
-#ifndef F2_AUTORUN_G1
+#ifndef FOLLOWER1_AUTORUN_G1
   reportTelemetry();
 #endif
   wdt_reset();
