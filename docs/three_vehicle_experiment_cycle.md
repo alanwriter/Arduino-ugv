@@ -8,7 +8,7 @@ calibration profile.
 | --- | --- | --- | --- |
 | Follower 1 | `follower1` | `follower1-demo` | Full profile calibrated; demo image prepared. |
 | Follower 2 | `follower2` | `follower2-demo` | MPU/encoder/pin/geometry measurement in progress. |
-| Leader 1 | `leader1` | `leader1-demo` | Starts after Follower 2 follows the same process. |
+| Leader 1 | `leader1` | `nanoatmega328_demo_g1` in `leader1` | Calibration skeleton ready; parameters and paths are locked. |
 
 ## Repeatable cycle for each vehicle
 

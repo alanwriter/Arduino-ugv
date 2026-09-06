@@ -1,21 +1,21 @@
 #pragma once
 
 // ---------------------------------------------------------------------------
-// Follower 2 vehicle profile. This is the only vehicle-specific source file.
+// Leader 1 vehicle profile. This is the only vehicle-specific source file.
 // The shared controller, PID, safety checks and demo state machine stay equal
 // across Follower 1, Follower 2 and Leader 1.
 // ---------------------------------------------------------------------------
 
 #define VEHICLE_PROFILE_HELP_TITLE \
-  "Follower 2 calibration controller ready. Motors are stopped after boot."
+  "Leader 1 calibration controller ready. Motors are stopped after boot."
 #define VEHICLE_PROFILE_PATH_POLICY \
-  "Follower 2 provisional geometry: G1 enabled; G2/G3 locked."
+  "Leader 1 has no approved path yet; finish its hardware calibration first."
 #define VEHICLE_PROFILE_BOOT_MESSAGE \
-  "FIRMWARE_PROFILE=F2 (follower2 calibration pending)"
+  "FIRMWARE_PROFILE=L1 (leader1 calibration pending)"
 #define VEHICLE_PROFILE_DEMO_BOOT_MESSAGE \
-  "FIRMWARE_PROFILE=F2-DEMO (one-shot autonomous G1)"
+  "FIRMWARE_PROFILE=L1-DEMO (one-shot autonomous G1)"
 #define VEHICLE_PROFILE_STARTUP_NOTICE \
-  "F2: verify pin map and record MPU/encoder data before enabling paths."
+  "L1: verify pin map and record MPU/encoder data before enabling paths."
 
 // Current shared controller requires this standardized encoder interrupt map:
 // left A/B = D2/D8, right A/B = D7/D12. The low-level AVR decoder uses these
@@ -34,18 +34,19 @@ constexpr uint8_t RIGHT_PWM_PIN = 10;
 constexpr uint8_t MPU6050_SDA_PIN = A4;
 constexpr uint8_t MPU6050_SCL_PIN = A5;
 
-// 2026-09-06 F2 measurement: decoded 4x AB counts across 10 marked turns.
-constexpr float LEFT_TICKS_PER_WHEEL_REVOLUTION = 1216.2f;
-constexpr float RIGHT_TICKS_PER_WHEEL_REVOLUTION = 1237.4f;
-constexpr float WHEEL_DIAMETER_MM = 65.0f; // Provisional.
-constexpr float WHEEL_TRACK_MM = 128.0f;   // Provisional.
+// Uncalibrated L1 reference values: do not use them for a path. Replace after
+// L1's own 10-turn encoder, wheel-diameter and track measurements.
+constexpr float LEFT_TICKS_PER_WHEEL_REVOLUTION = 1200.0f;
+constexpr float RIGHT_TICKS_PER_WHEEL_REVOLUTION = 1200.0f;
+constexpr float WHEEL_DIAMETER_MM = 65.0f;
+constexpr float WHEEL_TRACK_MM = 130.0f;
 
 constexpr bool LEFT_MOTOR_REVERSED = false;
 constexpr bool RIGHT_MOTOR_REVERSED = false;
 constexpr bool LEFT_ENCODER_REVERSED = false;
-constexpr bool RIGHT_ENCODER_REVERSED = true;
+constexpr bool RIGHT_ENCODER_REVERSED = false;
 constexpr bool GYRO_Z_REVERSED = false;
 
-// F2 may run cautious straight G1 tests. Paths containing turns remain locked
-// until repeated floor data verifies its provisional geometry above.
-constexpr uint8_t MAX_APPROVED_PRESET_PATH = 1;
+// L1 demo compiles from the same source but refuses to move until L1's own
+// interactive calibration profile has approved G1.
+constexpr uint8_t MAX_APPROVED_PRESET_PATH = 0;
