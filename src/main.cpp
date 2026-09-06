@@ -823,6 +823,20 @@ unsigned long pathLastLeftEncoderProgressMs = 0;
 unsigned long pathLastRightEncoderProgressMs = 0;
 bool encoderPreflightPassed = false;
 
+bool activePathStepIsTurn() {
+  return motionMode == MOTION_PATH && activePath != 0 &&
+         pathStepIndex < activePathLength &&
+         activePath[pathStepIndex].kind == PATH_TURN_DEGREES;
+}
+
+int addSignedPwmBias(int command, int bias) {
+  if (command == 0 || bias <= 0) {
+    return command;
+  }
+  const int signedBias = command > 0 ? bias : -bias;
+  return constrain(command + signedBias, -MOTOR_MAX_PWM, MOTOR_MAX_PWM);
+}
+
 #ifdef AUTORUN_PRESET_DEMO
 // This common state machine is intentionally identical for every vehicle.
 constexpr unsigned long AUTORUN_STILLNESS_DELAY_MS = 3000UL;
@@ -1231,8 +1245,12 @@ void controlStep(float dtSeconds) {
     if (motionMode == MOTION_PATH) {
       slewWheelTarget(leftController, dtSeconds);
       slewWheelTarget(rightController, dtSeconds);
-      const int leftPwm = calculateWheelPwm(leftController, dtSeconds);
-      const int rightPwm = calculateWheelPwm(rightController, dtSeconds);
+      int leftPwm = calculateWheelPwm(leftController, dtSeconds);
+      int rightPwm = calculateWheelPwm(rightController, dtSeconds);
+      if (activePathStepIsTurn()) {
+        leftPwm = addSignedPwmBias(leftPwm, TURN_PWM_BIAS);
+        rightPwm = addSignedPwmBias(rightPwm, TURN_PWM_BIAS);
+      }
       setMotorOutputs(leftPwm, rightPwm);
     }
     return;
@@ -1376,7 +1394,9 @@ void printConfiguration() {
   Serial.print(F(",wheel_diameter_mm="));
   Serial.print(WHEEL_DIAMETER_MM, 1);
   Serial.print(F(",track_mm="));
-  Serial.println(WHEEL_TRACK_MM, 1);
+  Serial.print(WHEEL_TRACK_MM, 1);
+  Serial.print(F(",turn_pwm_bias="));
+  Serial.println(TURN_PWM_BIAS);
 }
 
 void printStatus() {
