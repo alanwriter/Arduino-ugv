@@ -1,14 +1,14 @@
 # Three-vehicle calibration and demo cycle
 
-Each physical vehicle has its own branch and its own measured parameters. A
-vehicle's autonomous demo is created only from that vehicle's approved full
-calibration profile.
+Each physical vehicle has its own branch and measured profile. The autonomous
+demo is built from the same approved profile in that vehicle's branch, so it
+cannot accidentally use another car's encoder or direction settings.
 
-| Vehicle | Full calibration branch | Autonomous demo branch | Current state |
+| Vehicle | Full calibration branch | Autonomous demo build target | Current state |
 | --- | --- | --- | --- |
-| Follower 1 | `follower1` | `follower1-demo` | Full profile calibrated; demo image prepared. |
-| Follower 2 | `follower2` | `follower2-demo` | MPU/encoder/pin/geometry measurement in progress. |
-| Leader 1 | `leader1` | `nanoatmega328_demo_g1` in `leader1` | Calibration skeleton ready; parameters and paths are locked. |
+| Follower 1 | `follower1` | `nanoatmega328_demo_g1` in `follower1` | Full profile calibrated; G1–G3 approved. |
+| Follower 2 | `follower2` | `nanoatmega328_demo_g1` in `follower2` | MPU/encoder calibration recorded; cautious G1 approved. |
+| Leader 1 | `leader1` | `nanoatmega328_demo_g1` in `leader1` | MPU/encoder calibration recorded; cautious G1 approved. |
 
 ## Repeatable cycle for each vehicle
 
@@ -19,13 +19,15 @@ pin map confirmed
   -> motor and logical encoder directions corrected
   -> 10-turn ticks/rev plus wheel geometry measured
   -> full-controller G1 ground test repeated
-  -> freeze that vehicle's calibration branch
-  -> derive its one-shot autonomous G1 demo branch
+  -> freeze that vehicle's calibration profile
+  -> build its one-shot autonomous G1 demo environment
   -> run demo, record distance / lateral / heading error
   -> feed repeatable errors back into that vehicle only
 ```
 
-Do not transfer an encoder direction, ticks/revolution, tyre diameter, track
-width, gyro sign or pin assignment from one physical vehicle to another just
-because the parts look similar. Only the software structure and test method are
-shared.
+Do not transfer an encoder direction, ticks/revolution, gyro sign or pin
+assignment from one physical vehicle to another just because the parts look
+similar. Only the software structure and test method are shared. Wheel diameter
+and track have a user-confirmed common initial value of 65 mm / 130 mm for all
+three vehicles; retain it as provisional until each vehicle's floor tests prove
+or refine it.
