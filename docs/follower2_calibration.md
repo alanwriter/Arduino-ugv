@@ -69,7 +69,7 @@ new motor direction or unknown encoder wire.
 | Right motor direction | forward with `RIGHT_MOTOR_REVERSED = false` | `F` raised-wheel test |
 | Left encoder direction | forward raw count positive | `LEFT_ENCODER_REVERSED = false` |
 | Right encoder direction | forward raw count negative | `RIGHT_ENCODER_REVERSED = true` |
-| Path-turn PWM bias | +10 PWM per driven wheel during `PATH_TURN_DEGREES` | F2 first square needed more turn breakaway torque; no effect on straight/manual commands |
+| Path-turn PWM bias | 0 PWM | A temporary +10 trial was reverted after the caster-wheel binding was lubricated; diagnose encoder/MPU turn feedback before retuning output. |
 | Left ticks/rev | 1216.2 | 12,162 / 10 marked forward turns |
 | Right ticks/rev | 1237.4 | 12,374 / 10 marked forward turns |
 | Left A/B/invalid | 6081 / 6083 / 0 | 12,164 valid edges |
