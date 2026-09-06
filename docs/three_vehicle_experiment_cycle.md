@@ -6,9 +6,9 @@ cannot accidentally use another car's encoder or direction settings.
 
 | Vehicle | Full calibration branch | Autonomous demo build target | Current state |
 | --- | --- | --- | --- |
-| Follower 1 | `follower1` | `nanoatmega328_demo_g1` in `follower1` | Full profile calibrated; G1–G3 approved. |
-| Follower 2 | `follower2` | `nanoatmega328_demo_g1` in `follower2` | MPU/encoder calibration recorded; cautious G1 approved. |
-| Leader 1 | `leader1` | `nanoatmega328_demo_g1` in `leader1` | MPU/encoder calibration recorded; cautious G1 approved. |
+| Follower 1 | `follower1` | `nanoatmega328_demo_square` in `follower1` | Full profile calibrated; G1–G3 approved. |
+| Follower 2 | `follower2` | `nanoatmega328_demo_square` in `follower2` | MPU/encoder calibration recorded; G1 approved, square remains gated until G2 is tested. |
+| Leader 1 | `leader1` | `nanoatmega328_demo_square` in `leader1` | MPU/encoder calibration recorded; first 700 mm square test authorized. |
 
 ## Repeatable cycle for each vehicle
 
@@ -19,8 +19,9 @@ pin map confirmed
   -> motor and logical encoder directions corrected
   -> 10-turn ticks/rev plus wheel geometry measured
   -> full-controller G1 ground test repeated
+  -> full-controller G2 700 mm square tested and measured
   -> freeze that vehicle's calibration profile
-  -> build its one-shot autonomous G1 demo environment
+  -> build its one-shot autonomous square demo environment
   -> run demo, record distance / lateral / heading error
   -> feed repeatable errors back into that vehicle only
 ```
