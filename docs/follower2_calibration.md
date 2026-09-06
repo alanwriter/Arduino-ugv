@@ -62,19 +62,32 @@ new motor direction or unknown encoder wire.
 | Item | Follower 2 value | Evidence / notes |
 | --- | --- | --- |
 | MPU address |  | `I` output |
-| gyro-Z raw bias |  | `C` output while still |
-| yaw sign |  | left turn = positive/negative |
-| Left motor direction |  | `F` raised-wheel test |
-| Right motor direction |  | `F` raised-wheel test |
-| Left encoder direction |  | forward count sign |
-| Right encoder direction |  | forward count sign |
-| Left ticks/rev |  | `count / 10` marked turns |
-| Right ticks/rev |  | `count / 10` marked turns |
-| Left A/B/invalid |  | `D` output |
-| Right A/B/invalid |  | `D` output |
+| gyro-Z raw bias | -102.78 raw | `C`, vehicle still |
+| yaw sign | left +90.5°, right -90.0°, return +0.4° | Z positive is logical left |
+| Left motor direction | forward with `LEFT_MOTOR_REVERSED = false` | `F` raised-wheel test |
+| Right motor direction | forward with `RIGHT_MOTOR_REVERSED = false` | `F` raised-wheel test |
+| Left encoder direction | forward raw count positive | `LEFT_ENCODER_REVERSED = false` |
+| Right encoder direction | forward raw count negative | `RIGHT_ENCODER_REVERSED = true` |
+| Left ticks/rev | 1216.2 | 12,162 / 10 marked forward turns |
+| Right ticks/rev | 1237.4 | 12,374 / 10 marked forward turns |
+| Left A/B/invalid | 6081 / 6083 / 0 | 12,164 valid edges |
+| Right A/B/invalid | 6199 / 6187 / 0 | 12,386 valid edges |
 | Wheel diameter (mm) |  | loaded measurement |
 | Track width (mm) |  | wheel-centre measurement |
 
 After this record is complete, create `follower2-demo` from the approved F2
 branch. Its autonomous sequence will be the same pattern as Follower 1 demo:
 power on, stillness delay, gyro-Z calibration, reset pose, fixed G1, then stop.
+
+## 2026-09-06 first sensor/encoder result
+
+The MPU and both encoders pass the first acceptance test. The static attitude
+stream held `yaw_rel=0.0°` after calibration; the small static roll/pitch and
+about 1.08–1.09 g accelerometer magnitude are not used for yaw steering. The
+second raised-wheel `F` test produced left `+3903` and right raw `-3708`
+counts, confirming the right decoder inversion above. The first `F` command
+showed no encoder motion, so its result was excluded; the subsequent moving
+test is the accepted direction result.
+
+Paths remain locked because Follower 2's loaded wheel diameter and track width
+still need measurement, followed by a cautious ground G1 test.

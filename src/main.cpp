@@ -42,9 +42,11 @@ constexpr uint8_t MPU6050_SCL_PIN = A5;
 constexpr float PI_F = 3.14159265358979323846f;
 constexpr bool FOLLOWER2_PATH_CALIBRATION_APPROVED = false;
 
-// TEMPORARY ONLY: replace each value from Follower 2's own 10-turn test.
-constexpr float LEFT_TICKS_PER_WHEEL_REVOLUTION = 1200.0f;
-constexpr float RIGHT_TICKS_PER_WHEEL_REVOLUTION = 1200.0f;
+// follower2, 2026-09-06: exact 10 marked forward wheel revolutions yielded
+// 12,162 left and 12,374 right decoded counts. These are 4x AB-quadrature
+// counts, not an encoder-data-sheet pulse count.
+constexpr float LEFT_TICKS_PER_WHEEL_REVOLUTION = 1216.2f;
+constexpr float RIGHT_TICKS_PER_WHEEL_REVOLUTION = 1237.4f;
 
 // TEMPORARY ONLY: measure Follower 2's outside tyre diameter and wheel track.
 constexpr float WHEEL_DIAMETER_MM = 65.0f;
@@ -61,7 +63,9 @@ constexpr bool LEFT_MOTOR_REVERSED = false;
 constexpr bool RIGHT_MOTOR_REVERSED = false;
 
 constexpr bool LEFT_ENCODER_REVERSED = false;
-constexpr bool RIGHT_ENCODER_REVERSED = false;
+// Follower 2: physical F motion is forward on both wheels; left raw count is
+// positive while right raw count is negative, so reverse the right decoder.
+constexpr bool RIGHT_ENCODER_REVERSED = true;
 
 // Make a logical left turn increase pose heading. Test with M-80,80.
 constexpr bool GYRO_Z_REVERSED = false;
