@@ -73,7 +73,7 @@ new motor direction or unknown encoder wire.
 | Left A/B/invalid | 6081 / 6083 / 0 | 12,164 valid edges |
 | Right A/B/invalid | 6199 / 6187 / 0 | 12,386 valid edges |
 | Wheel diameter (mm) | 65, provisional | approximate outside measurement |
-| Track width (mm) | 128, provisional | approximate wheel-centre measurement |
+| Track width (mm) | 130, provisional | shared three-vehicle wheel-centre assumption |
 
 After this record is complete, create `follower2-demo` from the approved F2
 branch. Its autonomous sequence will be the same pattern as Follower 1 demo:
@@ -89,7 +89,9 @@ counts, confirming the right decoder inversion above. The first `F` command
 showed no encoder motion, so its result was excluded; the subsequent moving
 test is the accepted direction result.
 
-The first geometry estimate is 65 mm wheel diameter and 128 mm track width.
+The first shared geometry estimate is 65 mm wheel diameter and 130 mm track
+width. The user confirmed these physical dimensions are common to F1, F2 and
+L1; retain the values as provisional until repeated floor tests refine them.
 This enables G1 only; G2/G3 stay locked until the straight-line ground test is
 repeatable.
 

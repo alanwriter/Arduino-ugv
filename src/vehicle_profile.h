@@ -37,8 +37,10 @@ constexpr uint8_t MPU6050_SCL_PIN = A5;
 // 2026-09-06 F2 measurement: decoded 4x AB counts across 10 marked turns.
 constexpr float LEFT_TICKS_PER_WHEEL_REVOLUTION = 1216.2f;
 constexpr float RIGHT_TICKS_PER_WHEEL_REVOLUTION = 1237.4f;
+// Shared 2026-09-06 geometry assumption for F1, F2 and L1.  Refine only from
+// repeated floor tests; the same physical wheel/chassis dimensions are used.
 constexpr float WHEEL_DIAMETER_MM = 65.0f; // Provisional.
-constexpr float WHEEL_TRACK_MM = 128.0f;   // Provisional.
+constexpr float WHEEL_TRACK_MM = 130.0f;   // Provisional.
 
 constexpr bool LEFT_MOTOR_REVERSED = false;
 constexpr bool RIGHT_MOTOR_REVERSED = false;
