@@ -99,6 +99,20 @@ L1; retain the values as provisional until repeated floor tests refine them.
 This enables G1 and one supervised first 700 mm-square G2 calibration run; G3
 stays locked until the square's closure error is measured.
 
+## 2026-09-07 MPU-only heading trial
+
+After the F2 caster screw was corrected, a **local, uncommitted** trial used
+`100%` MPU6050 gyro-Z heading (`0%` encoder heading) for the same one-shot G2
+square. Encoders remained active for wheel-speed PID, 700 mm distance progress
+and safety watchdogs; only their heading contribution was removed.
+
+The vehicle ran a **very square** 700 mm × 700 mm path in this trial. This is
+strong evidence that F2 wheel slip / caster mechanics can contaminate the
+encoder-derived turn angle during motion, even though the encoder A/B signals
+and static MPU tests pass. The MPU-only code is deliberately not committed or
+pushed: GitHub retains the shared 70% gyro-Z / 30% encoder baseline until a
+repeatable dynamic calibration decision is made.
+
 ## F2 ground-test procedure
 
 1. Upload the current `follower2` branch and confirm the boot line says
