@@ -68,6 +68,10 @@ constexpr unsigned long IMU_INTERVAL_US = 10000UL;     // 100 Hz gyro read.
 constexpr unsigned long REPORT_INTERVAL_MS = 500UL;
 constexpr unsigned long ATTITUDE_REPORT_INTERVAL_MS = 200UL; // 5 Hz Serial view.
 constexpr unsigned long COMMAND_IDLE_MS = 80UL;
+constexpr uint8_t USB_IO_PROTOCOL_VERSION = 1;
+constexpr unsigned long USB_IO_MIN_TELEMETRY_INTERVAL_MS = 100UL;
+constexpr unsigned long USB_IO_MAX_TELEMETRY_INTERVAL_MS = 2000UL;
+constexpr unsigned long USB_IO_MIN_MOTOR_HOLD_MS = 50UL;
 constexpr unsigned long PATH_SETTLE_MS = 180UL;
 constexpr unsigned long PATH_TURN_CORRECTION_TIMEOUT_MS = 1000UL;
 constexpr unsigned long DRIVE_STEP_TIMEOUT_MS = 15000UL;
@@ -629,6 +633,8 @@ FaultCode faultCode = FAULT_NONE;
 int manualLeftPwm = 0;
 int manualRightPwm = 0;
 unsigned long manualExpiresMs = 0;
+unsigned long usbIoTelemetryIntervalMs = 0;
+unsigned long usbIoLastTelemetryMs = 0;
 
 void resetWheelController(WheelController &controller, long count) {
   controller.lastCount = count;
@@ -1223,7 +1229,8 @@ void updatePathControl() {
                                  turnDirection * wheelSpeedMmPerSecond);
 }
 
-void startManualMotorCommand(int leftPwm, int rightPwm) {
+void startManualMotorCommand(int leftPwm, int rightPwm,
+                             unsigned long holdMs = MANUAL_COMMAND_TIMEOUT_MS) {
   faultCode = FAULT_NONE;
   motionMode = MOTION_MANUAL;
   activePath = 0;
@@ -1231,7 +1238,7 @@ void startManualMotorCommand(int leftPwm, int rightPwm) {
   pathSettling = false;
   manualLeftPwm = constrain(leftPwm, -MOTOR_MAX_PWM, MOTOR_MAX_PWM);
   manualRightPwm = constrain(rightPwm, -MOTOR_MAX_PWM, MOTOR_MAX_PWM);
-  manualExpiresMs = millis() + MANUAL_COMMAND_TIMEOUT_MS;
+  manualExpiresMs = millis() + holdMs;
   setWheelTargetsFromMmPerSecond(0.0f, 0.0f);
   immediatelyStopWheelControllers();
   Serial.print(F("Manual PWM L="));
@@ -1483,6 +1490,187 @@ void printStatus() {
   Serial.println();
 }
 
+// Machine-readable USB protocol for a Raspberry Pi. Human-oriented commands
+// above remain available for diagnostics; a Pi should send only IO,... lines
+// and parse only response lines that start with IO,. All values are ASCII and
+// comma-separated so the Nano does not need a dynamic JSON parser.
+void printUsbIoMode() {
+  switch (motionMode) {
+    case MOTION_IDLE:
+      Serial.print(F("idle"));
+      break;
+    case MOTION_MANUAL:
+      Serial.print(F("manual"));
+      break;
+    case MOTION_PATH:
+      Serial.print(F("path"));
+      break;
+    case MOTION_FAULT:
+      Serial.print(F("fault"));
+      break;
+  }
+}
+
+void printUsbIoAck(uint16_t sequence, const __FlashStringHelper *operation) {
+  Serial.print(F("IO,ACK,"));
+  Serial.print(sequence);
+  Serial.print(F(","));
+  Serial.println(operation);
+}
+
+void printUsbIoError(uint16_t sequence, const __FlashStringHelper *code) {
+  Serial.print(F("IO,ERROR,"));
+  Serial.print(sequence);
+  Serial.print(F(","));
+  Serial.println(code);
+}
+
+void printUsbIoStatus(uint16_t sequence, bool telemetry) {
+  EncoderSnapshot left;
+  EncoderSnapshot right;
+  readEncoderSnapshots(left, right);
+
+  // IO,STATUS|TELEMETRY,sequence,mode,x_mm,y_mm,heading_deg,left_count,
+  // right_count,left_tps,right_tps,left_target_tps,right_target_tps,
+  // left_pwm,right_pwm,fault_code,encoder_preflight,imu_present,
+  // imu_calibrated,path_number,path_step
+  Serial.print(F("IO,"));
+  Serial.print(telemetry ? F("TELEMETRY") : F("STATUS"));
+  Serial.print(F(","));
+  Serial.print(sequence);
+  Serial.print(F(","));
+  printUsbIoMode();
+  Serial.print(F(","));
+  Serial.print(pose.xMm, 1);
+  Serial.print(F(","));
+  Serial.print(pose.yMm, 1);
+  Serial.print(F(","));
+  Serial.print(pose.headingRad * 180.0f / PI_F, 1);
+  Serial.print(F(","));
+  Serial.print(left.count);
+  Serial.print(F(","));
+  Serial.print(right.count);
+  Serial.print(F(","));
+  Serial.print(leftController.measuredTicksPerSecond, 1);
+  Serial.print(F(","));
+  Serial.print(rightController.measuredTicksPerSecond, 1);
+  Serial.print(F(","));
+  Serial.print(leftController.targetTicksPerSecond, 1);
+  Serial.print(F(","));
+  Serial.print(rightController.targetTicksPerSecond, 1);
+  Serial.print(F(","));
+  Serial.print(appliedLeftPwm);
+  Serial.print(F(","));
+  Serial.print(appliedRightPwm);
+  Serial.print(F(","));
+  Serial.print(static_cast<uint8_t>(faultCode));
+  Serial.print(F(","));
+  Serial.print(encoderPreflightPassed ? 1 : 0);
+  Serial.print(F(","));
+  Serial.print(imuPresent ? 1 : 0);
+  Serial.print(F(","));
+  Serial.print(imuCalibrated ? 1 : 0);
+  Serial.print(F(","));
+  Serial.print(motionMode == MOTION_PATH ? activePathNumber : 0);
+  Serial.print(F(","));
+  Serial.println(motionMode == MOTION_PATH ? pathStepIndex + 1 : 0);
+}
+
+void printUsbIoConfiguration(uint16_t sequence) {
+  // IO,CONFIG,sequence,left_ticks_per_rev,right_ticks_per_rev,
+  // wheel_diameter_mm,wheel_track_mm,turn_pwm_bias,max_pwm,
+  // max_manual_hold_ms,max_approved_path
+  Serial.print(F("IO,CONFIG,"));
+  Serial.print(sequence);
+  Serial.print(F(","));
+  Serial.print(LEFT_TICKS_PER_WHEEL_REVOLUTION, 1);
+  Serial.print(F(","));
+  Serial.print(RIGHT_TICKS_PER_WHEEL_REVOLUTION, 1);
+  Serial.print(F(","));
+  Serial.print(WHEEL_DIAMETER_MM, 1);
+  Serial.print(F(","));
+  Serial.print(WHEEL_TRACK_MM, 1);
+  Serial.print(F(","));
+  Serial.print(TURN_PWM_BIAS);
+  Serial.print(F(","));
+  Serial.print(MOTOR_MAX_PWM);
+  Serial.print(F(","));
+  Serial.print(MANUAL_COMMAND_TIMEOUT_MS);
+  Serial.print(F(","));
+  Serial.println(MAX_APPROVED_PRESET_PATH);
+}
+
+void printUsbIoImu(uint16_t sequence) {
+  // IO,IMU,sequence,present,calibrated,address,roll_deg,pitch_deg,
+  // gyro_x_dps,gyro_y_dps,gyro_z_dps,bias_raw,read_failures,
+  // consecutive_read_failures
+  Serial.print(F("IO,IMU,"));
+  Serial.print(sequence);
+  Serial.print(F(","));
+  Serial.print(imuPresent ? 1 : 0);
+  Serial.print(F(","));
+  Serial.print(imuCalibrated ? 1 : 0);
+  Serial.print(F(","));
+  Serial.print(imuAddress);
+  Serial.print(F(","));
+  Serial.print(accelerometerRollDegrees, 1);
+  Serial.print(F(","));
+  Serial.print(accelerometerPitchDegrees, 1);
+  Serial.print(F(","));
+  Serial.print(gyroXDegreesPerSecondRaw, 2);
+  Serial.print(F(","));
+  Serial.print(gyroYDegreesPerSecondRaw, 2);
+  Serial.print(F(","));
+  Serial.print(gyroZDegreesPerSecond, 2);
+  Serial.print(F(","));
+  Serial.print(gyroZBiasRaw, 2);
+  Serial.print(F(","));
+  Serial.print(imuReadFailures);
+  Serial.print(F(","));
+  Serial.println(consecutiveImuReadFailures);
+}
+
+void printUsbIoEncoders(uint16_t sequence) {
+  EncoderSnapshot left;
+  EncoderSnapshot right;
+  readEncoderSnapshots(left, right);
+  // IO,ENCODER,sequence,preflight,LA,LB,RA,RB,left_count,left_valid_edges,
+  // left_a_edges,left_b_edges,left_invalid,right_count,right_valid_edges,
+  // right_a_edges,right_b_edges,right_invalid
+  Serial.print(F("IO,ENCODER,"));
+  Serial.print(sequence);
+  Serial.print(F(","));
+  Serial.print(encoderPreflightPassed ? 1 : 0);
+  Serial.print(F(","));
+  Serial.print(digitalRead(LEFT_ENCODER_A_PIN));
+  Serial.print(F(","));
+  Serial.print(digitalRead(LEFT_ENCODER_B_PIN));
+  Serial.print(F(","));
+  Serial.print(digitalRead(RIGHT_ENCODER_A_PIN));
+  Serial.print(F(","));
+  Serial.print(digitalRead(RIGHT_ENCODER_B_PIN));
+  Serial.print(F(","));
+  Serial.print(left.count);
+  Serial.print(F(","));
+  Serial.print(left.validEdges);
+  Serial.print(F(","));
+  Serial.print(left.aEdges);
+  Serial.print(F(","));
+  Serial.print(left.bEdges);
+  Serial.print(F(","));
+  Serial.print(left.invalidTransitions);
+  Serial.print(F(","));
+  Serial.print(right.count);
+  Serial.print(F(","));
+  Serial.print(right.validEdges);
+  Serial.print(F(","));
+  Serial.print(right.aEdges);
+  Serial.print(F(","));
+  Serial.print(right.bEdges);
+  Serial.print(F(","));
+  Serial.println(right.invalidTransitions);
+}
+
 void printHelp() {
   Serial.println(F(VEHICLE_PROFILE_HELP_TITLE));
   Serial.println(F(VEHICLE_PROFILE_PATH_POLICY));
@@ -1500,6 +1688,7 @@ void printHelp() {
   Serial.println(F("  I           MPU6050 diagnostic"));
   Serial.println(F("  T           toggle live MPU6050 attitude monitor (motors stopped)"));
   Serial.println(F("  K           geometry/tick calibration constants"));
+  Serial.println(F("  IO,...      Raspberry Pi machine protocol; see docs/leader_usb_io_protocol.md"));
   Serial.println(F("  ?           this help"));
 }
 
@@ -1519,6 +1708,222 @@ bool parseManualPwm(const char *text, int &leftPwm, int &rightPwm) {
   rightPwm =
       static_cast<int>(constrain(rightValue, -MOTOR_MAX_PWM, MOTOR_MAX_PWM));
   return true;
+}
+
+char *nextUsbIoField(char *&cursor) {
+  if (cursor == 0) {
+    return 0;
+  }
+  char *field = cursor;
+  char *comma = strchr(cursor, ',');
+  if (comma == 0) {
+    cursor = 0;
+  } else {
+    *comma = '\0';
+    cursor = comma + 1;
+  }
+  return field;
+}
+
+bool parseUsbIoInteger(const char *text, long minimum, long maximum,
+                       long &value) {
+  if (text == 0 || *text == '\0') {
+    return false;
+  }
+  char *end = 0;
+  const long parsed = strtol(text, &end, 10);
+  if (end == text || *end != '\0' || parsed < minimum || parsed > maximum) {
+    return false;
+  }
+  value = parsed;
+  return true;
+}
+
+void uppercaseAscii(char *text) {
+  while (*text != '\0') {
+    if (*text >= 'a' && *text <= 'z') {
+      *text = static_cast<char>(*text - 'a' + 'A');
+    }
+    ++text;
+  }
+}
+
+bool hasNoMoreUsbIoFields(char *cursor) {
+  return nextUsbIoField(cursor) == 0;
+}
+
+void resetCountersAndPose();
+
+void handleUsbIoCommand(char *command) {
+  char *cursor = command;
+  const char *prefix = nextUsbIoField(cursor);
+  char *sequenceText = nextUsbIoField(cursor);
+  char *operation = nextUsbIoField(cursor);
+  long sequenceValue = 0;
+  if (prefix == 0 || strcmp(prefix, "IO") != 0 ||
+      !parseUsbIoInteger(sequenceText, 0, 65535, sequenceValue) ||
+      operation == 0 || *operation == '\0') {
+    printUsbIoError(0, F("FORMAT"));
+    return;
+  }
+
+  const uint16_t sequence = static_cast<uint16_t>(sequenceValue);
+  uppercaseAscii(operation);
+
+  if (strcmp(operation, "HELLO") == 0) {
+    long version = 0;
+    if (!parseUsbIoInteger(nextUsbIoField(cursor), 1, 255, version) ||
+        !hasNoMoreUsbIoFields(cursor)) {
+      printUsbIoError(sequence, F("FORMAT"));
+    } else if (version != USB_IO_PROTOCOL_VERSION) {
+      printUsbIoError(sequence, F("VERSION"));
+    } else {
+      Serial.print(F("IO,HELLO,"));
+      Serial.print(sequence);
+      Serial.print(F(","));
+      Serial.print(USB_IO_PROTOCOL_VERSION);
+      Serial.print(F(",115200,"));
+      Serial.println(F(VEHICLE_PROFILE_BOOT_MESSAGE));
+    }
+    return;
+  }
+
+  if (strcmp(operation, "PING") == 0) {
+    if (!hasNoMoreUsbIoFields(cursor)) {
+      printUsbIoError(sequence, F("FORMAT"));
+      return;
+    }
+    Serial.print(F("IO,PONG,"));
+    Serial.print(sequence);
+    Serial.print(F(","));
+    Serial.println(millis());
+    return;
+  }
+
+  if (strcmp(operation, "STATUS") == 0) {
+    if (!hasNoMoreUsbIoFields(cursor)) {
+      printUsbIoError(sequence, F("FORMAT"));
+      return;
+    }
+    printUsbIoStatus(sequence, false);
+    return;
+  }
+
+  if (strcmp(operation, "CONFIG") == 0) {
+    if (!hasNoMoreUsbIoFields(cursor)) {
+      printUsbIoError(sequence, F("FORMAT"));
+      return;
+    }
+    printUsbIoConfiguration(sequence);
+    return;
+  }
+
+  if (strcmp(operation, "IMU") == 0) {
+    if (!hasNoMoreUsbIoFields(cursor)) {
+      printUsbIoError(sequence, F("FORMAT"));
+      return;
+    }
+    printUsbIoImu(sequence);
+    return;
+  }
+
+  if (strcmp(operation, "ENCODER") == 0) {
+    if (!hasNoMoreUsbIoFields(cursor)) {
+      printUsbIoError(sequence, F("FORMAT"));
+      return;
+    }
+    printUsbIoEncoders(sequence);
+    return;
+  }
+
+  if (strcmp(operation, "STOP") == 0) {
+    if (!hasNoMoreUsbIoFields(cursor)) {
+      printUsbIoError(sequence, F("FORMAT"));
+      return;
+    }
+    stopMotion(true);
+    printUsbIoAck(sequence, F("STOP"));
+    return;
+  }
+
+  if (strcmp(operation, "RESET") == 0) {
+    if (!hasNoMoreUsbIoFields(cursor)) {
+      printUsbIoError(sequence, F("FORMAT"));
+      return;
+    }
+    resetCountersAndPose();
+    printUsbIoAck(sequence, F("RESET"));
+    return;
+  }
+
+  if (strcmp(operation, "CALIBRATE") == 0) {
+    if (!hasNoMoreUsbIoFields(cursor)) {
+      printUsbIoError(sequence, F("FORMAT"));
+      return;
+    }
+    stopMotion(true);
+    if (calibrateGyroZ()) {
+      printUsbIoAck(sequence, F("CALIBRATE"));
+    } else {
+      printUsbIoError(sequence, F("CALIBRATE_FAILED"));
+    }
+    return;
+  }
+
+  if (strcmp(operation, "MOTOR") == 0) {
+    long leftPwm = 0;
+    long rightPwm = 0;
+    long holdMs = 0;
+    if (!parseUsbIoInteger(nextUsbIoField(cursor), -MOTOR_MAX_PWM,
+                           MOTOR_MAX_PWM, leftPwm) ||
+        !parseUsbIoInteger(nextUsbIoField(cursor), -MOTOR_MAX_PWM,
+                           MOTOR_MAX_PWM, rightPwm) ||
+        !parseUsbIoInteger(nextUsbIoField(cursor), USB_IO_MIN_MOTOR_HOLD_MS,
+                           MANUAL_COMMAND_TIMEOUT_MS, holdMs) ||
+        !hasNoMoreUsbIoFields(cursor)) {
+      printUsbIoError(sequence, F("MOTOR_RANGE"));
+      return;
+    }
+    startManualMotorCommand(static_cast<int>(leftPwm),
+                            static_cast<int>(rightPwm),
+                            static_cast<unsigned long>(holdMs));
+    printUsbIoAck(sequence, F("MOTOR"));
+    return;
+  }
+
+  if (strcmp(operation, "PATH") == 0) {
+    long pathNumber = 0;
+    if (!parseUsbIoInteger(nextUsbIoField(cursor), 1, 3, pathNumber) ||
+        !hasNoMoreUsbIoFields(cursor)) {
+      printUsbIoError(sequence, F("PATH_RANGE"));
+      return;
+    }
+    startPresetPath(static_cast<uint8_t>(pathNumber));
+    if (motionMode == MOTION_PATH) {
+      printUsbIoAck(sequence, F("PATH"));
+    } else {
+      printUsbIoError(sequence, F("PATH_BLOCKED"));
+    }
+    return;
+  }
+
+  if (strcmp(operation, "TELEMETRY") == 0) {
+    long intervalMs = 0;
+    if (!parseUsbIoInteger(nextUsbIoField(cursor), 0,
+                           USB_IO_MAX_TELEMETRY_INTERVAL_MS, intervalMs) ||
+        !hasNoMoreUsbIoFields(cursor) ||
+        (intervalMs != 0 &&
+         intervalMs < static_cast<long>(USB_IO_MIN_TELEMETRY_INTERVAL_MS))) {
+      printUsbIoError(sequence, F("TELEMETRY_RANGE"));
+      return;
+    }
+    usbIoTelemetryIntervalMs = static_cast<unsigned long>(intervalMs);
+    usbIoLastTelemetryMs = 0;
+    printUsbIoAck(sequence, F("TELEMETRY"));
+    return;
+  }
+
+  printUsbIoError(sequence, F("OPERATION"));
 }
 
 void resetCountersAndPose() {
@@ -1589,6 +1994,13 @@ void updateAutoRunDemo() {
 #endif
 
 void handleCommand(char *command) {
+  if ((command[0] == 'I' || command[0] == 'i') &&
+      (command[1] == 'O' || command[1] == 'o') && command[2] == ',') {
+    uppercaseAscii(command);
+    handleUsbIoCommand(command);
+    return;
+  }
+
   char op = command[0];
   if (op >= 'a' && op <= 'z') {
     op = static_cast<char>(op - 'a' + 'A');
@@ -1707,6 +2119,20 @@ void reportTelemetry() {
   printStatus();
 }
 
+void reportUsbIoTelemetry() {
+  if (usbIoTelemetryIntervalMs == 0) {
+    return;
+  }
+  const unsigned long nowMs = millis();
+  if (nowMs - usbIoLastTelemetryMs < usbIoTelemetryIntervalMs) {
+    return;
+  }
+  usbIoLastTelemetryMs = nowMs;
+  // Sequence 0 identifies a subscription update rather than a reply to a
+  // particular request sequence.
+  printUsbIoStatus(0, true);
+}
+
 void disableWatchdogAfterReset() {
   // If a previous I2C/loop lock-up caused a watchdog reset, disable the
   // watchdog immediately so setup can restore the hardware safe state.
@@ -1804,6 +2230,7 @@ void loop() {
 
 #ifndef AUTORUN_PRESET_DEMO
   reportTelemetry();
+  reportUsbIoTelemetry();
 #endif
   wdt_reset();
 }
