@@ -53,7 +53,8 @@ IO,<sequence>,<OPERATION>[,<argument>...]\n
 | `STOP` | 無 | 立刻 coast stop，清除 fault | `IO,ACK,<sequence>,STOP` |
 | `RESET` | 無 | 停止、清 encoder、重設相對 pose／heading | `IO,ACK,...,RESET` |
 | `CALIBRATE` | 無 | 停止後量測 300 筆 gyro Z bias；車體必須靜止約 1.5 秒 | `IO,ACK,...,CALIBRATE` |
-| `MOTOR` | `left_pwm,right_pwm,hold_ms`；PWM 均為 `-165..165`，有效期 `50..1200` ms | 直接驅動左右輪；到期必停 | `IO,ACK,...,MOTOR` |
+| `MOTOR` | `left_pwm,right_pwm,hold_ms`；PWM 均為 `-165..165`，有效期 `50..1200` ms | 直接驅動左右輪；到期必停。僅供人工診斷。 | `IO,ACK,...,MOTOR` |
+| `VELOCITY` | `left_mm_s,right_mm_s,hold_ms`；速度均為整數 `-100..100` mm/s，有效期 `50..1200` ms | 將目標交給既有 Nano 輪速 PID／前饋／加速度限制；到期必停。需 IMU、encoder preflight 與 fault 全部正常。 | `IO,ACK,...,VELOCITY` |
 | `PATH` | `number=1..3` | 啟動已核准的預設路徑 | `IO,ACK,...,PATH` |
 | `TELEMETRY` | `interval_ms=0` 或 `100..2000` | `0` 關閉；其他值開始週期性狀態輸出 | `IO,ACK,...,TELEMETRY` |
 
@@ -61,14 +62,20 @@ IO,<sequence>,<OPERATION>[,<argument>...]\n
 
 ```text
 IO,42,MOTOR,80,80,500
-IO,43,STATUS
-IO,44,TELEMETRY,500
-IO,45,STOP
+IO,43,VELOCITY,45,70,180
+IO,44,STATUS
+IO,45,TELEMETRY,500
+IO,46,STOP
 ```
 
 `MOTOR` 的正值是車體邏輯前進，負值為後退；左右正負不同可原地轉向。它是短暫、
 開迴路的人工控制，Nano 無論 Pi 是否仍連著，都會在 `hold_ms` 到期後停止。不可用
 連續 `MOTOR` 命令取代 Nano 的 PID 或故障保護。
+
+`VELOCITY` 是 Pi 規劃軌跡與編隊時唯一應使用的運動介面。Pi 只送左右輪**目標速度**；
+Nano 仍以現有的 encoder 輪速控制器執行 PWM、靜摩擦前饋與加速度限制。Pi 必須在
+`hold_ms` 到期前送出下一筆 setpoint；任何 USB 中斷、錯誤、程式結束或 Ctrl-C 時都要
+嘗試 `STOP`。這不是把路徑寫入 Nano，亦不是讓 Pi 直接調 PWM。
 
 `PATH` 仍由 Nano 本地執行 PID、encoder preflight、IMU 校正、stall timeout 與
 path timeout。它只會在 `IMU present=1`、`calibrated=1`、`encoder_preflight=1` 且
@@ -88,8 +95,9 @@ IO,ACK,<sequence>,<OPERATION>
 IO,ERROR,<sequence>,<code>
 ```
 
-`ERROR` code 為 `FORMAT`、`VERSION`、`OPERATION`、`MOTOR_RANGE`、`PATH_RANGE`、
-`PATH_BLOCKED`、`TELEMETRY_RANGE` 或 `CALIBRATE_FAILED`。收到 `ERROR` 時 Pi 不可
+`ERROR` code 為 `FORMAT`、`VERSION`、`OPERATION`、`MOTOR_RANGE`、`VELOCITY_RANGE`、
+`VELOCITY_BLOCKED`、`PATH_RANGE`、`PATH_BLOCKED`、`TELEMETRY_RANGE` 或
+`CALIBRATE_FAILED`。收到 `ERROR` 時 Pi 不可
 假設動作已執行；應查詢 `STATUS`，必要時送 `STOP`。
 
 ### `STATUS` 與非同步 `TELEMETRY`
@@ -103,7 +111,7 @@ IO,TELEMETRY,0,...同上欄位...
 
 | 欄位 | 說明 |
 | --- | --- |
-| `mode` | `idle`、`manual`、`path` 或 `fault` |
+| `mode` | `idle`、`manual`、`velocity`、`path` 或 `fault` |
 | `x_mm`, `y_mm`, `heading_deg` | reset 後的相對里程計；非 GPS／SLAM／絕對座標 |
 | `left_count`, `right_count` | 4× AB quadrature 累積 tick |
 | `left_tps`, `right_tps` | 實測 ticks/s |
