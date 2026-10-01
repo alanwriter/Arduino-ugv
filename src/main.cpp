@@ -72,6 +72,10 @@ constexpr uint8_t USB_IO_PROTOCOL_VERSION = 1;
 constexpr unsigned long USB_IO_MIN_TELEMETRY_INTERVAL_MS = 100UL;
 constexpr unsigned long USB_IO_MAX_TELEMETRY_INTERVAL_MS = 2000UL;
 constexpr unsigned long USB_IO_MIN_MOTOR_HOLD_MS = 50UL;
+// A Pi may request this bounded wheel-speed range. The existing controller
+// applies its own tick-rate saturation, PID, feed-forward and acceleration
+// limit before PWM is written to the motors.
+constexpr long USB_IO_MAX_WHEEL_SPEED_MM_PER_SECOND = 100L;
 constexpr unsigned long PATH_SETTLE_MS = 180UL;
 constexpr unsigned long PATH_TURN_CORRECTION_TIMEOUT_MS = 1000UL;
 constexpr unsigned long DRIVE_STEP_TIMEOUT_MS = 15000UL;
@@ -604,6 +608,7 @@ struct WheelController {
 enum MotionMode : uint8_t {
   MOTION_IDLE,
   MOTION_MANUAL,
+  MOTION_VELOCITY,
   MOTION_PATH,
   MOTION_FAULT,
 };
@@ -633,6 +638,7 @@ FaultCode faultCode = FAULT_NONE;
 int manualLeftPwm = 0;
 int manualRightPwm = 0;
 unsigned long manualExpiresMs = 0;
+unsigned long velocityExpiresMs = 0;
 unsigned long usbIoTelemetryIntervalMs = 0;
 unsigned long usbIoLastTelemetryMs = 0;
 
@@ -1248,6 +1254,24 @@ void startManualMotorCommand(int leftPwm, int rightPwm,
   Serial.println(F(" (auto-stops in 1.2 s)"));
 }
 
+// This is intentionally a transport-level primitive, not a new path
+// controller. A Pi supplies the next bounded wheel-speed setpoint while this
+// established Nano controller keeps ownership of encoder PID, static-friction
+// feed-forward, target slew-rate limiting, PWM and the timeout stop.
+void startVelocityCommand(float leftMmPerSecond, float rightMmPerSecond,
+                          unsigned long holdMs) {
+  faultCode = FAULT_NONE;
+  motionMode = MOTION_VELOCITY;
+  activePath = 0;
+  activePathLength = 0;
+  pathSettling = false;
+  pathSettlingForTurn = false;
+  manualLeftPwm = 0;
+  manualRightPwm = 0;
+  velocityExpiresMs = millis() + holdMs;
+  setWheelTargetsFromMmPerSecond(leftMmPerSecond, rightMmPerSecond);
+}
+
 void controlStep(float dtSeconds) {
   EncoderSnapshot left;
   EncoderSnapshot right;
@@ -1288,6 +1312,23 @@ void controlStep(float dtSeconds) {
     return;
   }
 
+  if (motionMode == MOTION_VELOCITY) {
+    if (static_cast<long>(millis() - velocityExpiresMs) >= 0) {
+      stopMotion(false);
+      Serial.println(F("Velocity command timed out. Motors stopped."));
+      return;
+    }
+    if (consecutiveImuReadFailures > 20U) {
+      enterFault(FAULT_IMU_READ);
+      return;
+    }
+    slewWheelTarget(leftController, dtSeconds);
+    slewWheelTarget(rightController, dtSeconds);
+    setMotorOutputs(calculateWheelPwm(leftController, dtSeconds),
+                    calculateWheelPwm(rightController, dtSeconds));
+    return;
+  }
+
   setMotorOutputs(0, 0);
 }
 
@@ -1301,6 +1342,9 @@ void printMotionMode() {
       break;
     case MOTION_MANUAL:
       Serial.print(F("manual"));
+      break;
+    case MOTION_VELOCITY:
+      Serial.print(F("velocity"));
       break;
     case MOTION_PATH:
       Serial.print(F("path"));
@@ -1501,6 +1545,9 @@ void printUsbIoMode() {
       break;
     case MOTION_MANUAL:
       Serial.print(F("manual"));
+      break;
+    case MOTION_VELOCITY:
+      Serial.print(F("velocity"));
       break;
     case MOTION_PATH:
       Serial.print(F("path"));
@@ -1891,6 +1938,36 @@ void handleUsbIoCommand(char *command) {
     return;
   }
 
+  if (strcmp(operation, "VELOCITY") == 0) {
+    long leftMmPerSecond = 0;
+    long rightMmPerSecond = 0;
+    long holdMs = 0;
+    if (!parseUsbIoInteger(nextUsbIoField(cursor),
+                           -USB_IO_MAX_WHEEL_SPEED_MM_PER_SECOND,
+                           USB_IO_MAX_WHEEL_SPEED_MM_PER_SECOND,
+                           leftMmPerSecond) ||
+        !parseUsbIoInteger(nextUsbIoField(cursor),
+                           -USB_IO_MAX_WHEEL_SPEED_MM_PER_SECOND,
+                           USB_IO_MAX_WHEEL_SPEED_MM_PER_SECOND,
+                           rightMmPerSecond) ||
+        !parseUsbIoInteger(nextUsbIoField(cursor), USB_IO_MIN_MOTOR_HOLD_MS,
+                           MANUAL_COMMAND_TIMEOUT_MS, holdMs) ||
+        !hasNoMoreUsbIoFields(cursor)) {
+      printUsbIoError(sequence, F("VELOCITY_RANGE"));
+      return;
+    }
+    if (!imuPresent || !imuCalibrated || !encoderPreflightPassed ||
+        faultCode != FAULT_NONE) {
+      printUsbIoError(sequence, F("VELOCITY_BLOCKED"));
+      return;
+    }
+    startVelocityCommand(static_cast<float>(leftMmPerSecond),
+                         static_cast<float>(rightMmPerSecond),
+                         static_cast<unsigned long>(holdMs));
+    printUsbIoAck(sequence, F("VELOCITY"));
+    return;
+  }
+
   if (strcmp(operation, "PATH") == 0) {
     long pathNumber = 0;
     if (!parseUsbIoInteger(nextUsbIoField(cursor), 1, 3, pathNumber) ||
@@ -2208,7 +2285,8 @@ void loop() {
   printAttitudeTelemetry();
 #endif
   if (imuBusTimeoutOccurred) {
-    if (motionMode == MOTION_PATH || motionMode == MOTION_MANUAL) {
+    if (motionMode == MOTION_PATH || motionMode == MOTION_MANUAL ||
+        motionMode == MOTION_VELOCITY) {
       enterFault(FAULT_IMU_BUS_TIMEOUT);
     }
     imuBusTimeoutOccurred = false;
