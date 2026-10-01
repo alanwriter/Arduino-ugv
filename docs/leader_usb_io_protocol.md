@@ -1,6 +1,6 @@
-# Leader 1：Raspberry Pi USB I/O 通訊規格
+# Follower 1：Raspberry Pi USB I/O 通訊規格
 
-本文件定義 Raspberry Pi 與 Leader 1 Nano 的**機器可讀**控制協定。它使用 Nano
+本文件定義 Raspberry Pi 與 Follower 1 Nano 的**機器可讀**控制協定。它使用 Nano
 USB 埠的 CDC serial，並以 `115200 baud, 8-N-1` 傳輸 ASCII；每個輸入和輸出訊息
 各佔一行、以 `\n` 結尾。這不是 GPIO、I2C 或 Nano 的 D0/D1 UART 連線。
 
@@ -13,18 +13,17 @@ Pi 應使用穩定的 `/dev/serial/by-id/...` 路徑，不要假設 `/dev/ttyACM
 `/dev/ttyUSB0` 永遠不變。USB 開啟通常會使 Nano reset；因此打開 port 後須等待
 約 2 秒，先送 `HELLO` 與 `STOP`，才可查詢或運動。
 
-## Leader 1 韌體設定
+## Follower 1 韌體設定
 
-此版本建立於 `leader1` 校正資料：
+此版本建立於 `follower1` 校正資料：
 
 | 參數 | 值 |
 | --- | ---: |
-| 左／右 encoder ticks per revolution | 1216.4 / 1222.4 |
+| 左／右 encoder ticks per revolution | 1203.5 / 1200.0 |
 | 輪徑／輪距 | 65.0 mm / 130.0 mm（暫定） |
 | 最大 PWM | ±165 |
 | 手動馬達命令最長有效期 | 1200 ms |
-| 已開放路徑 | G1（500 mm 直線）、G2（700 mm 方形） |
-| 未開放路徑 | G3 |
+| 已開放路徑 | G1（500 mm 直線）、G2（700 mm 方形）、G3 |
 
 ## 通訊原則
 
@@ -47,7 +46,7 @@ IO,<sequence>,<OPERATION>[,<argument>...]\n
 | `HELLO` | `version=1` | 協定握手，不會動馬達 | `IO,HELLO,...` |
 | `PING` | 無 | 連線存活測試 | `IO,PONG,...` |
 | `STATUS` | 無 | 讀取完整運動狀態 | `IO,STATUS,...` |
-| `CONFIG` | 無 | 讀取 Leader 校正與限制 | `IO,CONFIG,...` |
+| `CONFIG` | 無 | 讀取 Follower 校正與限制 | `IO,CONFIG,...` |
 | `IMU` | 無 | 讀取 MPU6050 狀態與姿態 | `IO,IMU,...` |
 | `ENCODER` | 無 | 讀取兩組 AB encoder 與 edge 計數 | `IO,ENCODER,...` |
 | `STOP` | 無 | 立刻 coast stop，清除 fault | `IO,ACK,<sequence>,STOP` |

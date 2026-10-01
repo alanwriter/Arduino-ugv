@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Safe command-line client for the Leader 1 Nano USB I/O protocol."""
+"""Safe command-line client for the Follower 1 Nano USB I/O protocol."""
 
 from __future__ import annotations
 
@@ -51,7 +51,7 @@ class ProtocolError(RuntimeError):
 
 
 class NanoUsbIo:
-    """Line-based Leader 1 USB client with sequence-matched replies."""
+    """Line-based Follower 1 USB client with sequence-matched replies."""
 
     def __init__(self, port: str, baud: int = 115200, boot_wait: float = 2.0) -> None:
         self.device = serial.Serial(port, baudrate=baud, timeout=0.15, write_timeout=1)
@@ -130,7 +130,7 @@ def print_record(record: list[str]) -> None:
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Control Leader 1 through Nano USB serial.")
+    parser = argparse.ArgumentParser(description="Control Follower 1 through Nano USB serial.")
     parser.add_argument("--port", required=True, help="Use /dev/serial/by-id/... on Raspberry Pi")
     parser.add_argument("--baud", type=int, default=115200)
     parser.add_argument("--boot-wait", type=float, default=2.0)
