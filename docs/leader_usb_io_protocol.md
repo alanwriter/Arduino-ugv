@@ -162,28 +162,37 @@ pip install -r python_examples/requirements.txt
 ls -l /dev/serial/by-id/
 PORT=/dev/serial/by-id/<Nano 的完整名稱>
 
-python3 python_examples/leader_usb_control.py --port "$PORT" status
-python3 python_examples/leader_usb_control.py --port "$PORT" imu
-python3 python_examples/leader_usb_control.py --port "$PORT" encoders
+python3 python_examples/leader_usb_control.py --port "$PORT" session
 ```
 
-第一次在靜止、架高且可立即斷電的條件下測試：
+**必須使用同一個持續的 serial session** 做校正、encoder preflight 與路徑啟動。Nano
+在 USB serial 被重新開啟時通常會 reset；因此不能以多個獨立的 `calibrate`、`drive`、
+`path` CLI 程序串接，否則下一個程序可能清掉前一個程序建立的校正狀態。
 
-```bash
-# 車體絕對靜止，完成 gyro Z 校正
-python3 python_examples/leader_usb_control.py --port "$PORT" calibrate
+進入 `session` 後，第一次在靜止、架高且可立即斷電的條件下依序輸入：
 
-# 短暫手動測試，500 ms 後 Nano 自停；不要一開始跑路徑
-python3 python_examples/leader_usb_control.py --port "$PORT" drive 80 80 --hold-ms 500
-python3 python_examples/leader_usb_control.py --port "$PORT" stop
+```text
+leader> status
+leader> calibrate
+leader> imu
+leader> reset
+leader> motor 80 0 500
+leader> encoder
+leader> motor 0 80 500
+leader> encoder
+leader> status
 ```
 
-確認 IMU 已校正、兩輪 encoder preflight 已通過、四周有安全淨空且有人監看後，才可
-測試 G1 或受監看的 G2：
+`motor` 命令到期必停。兩輪 encoder 的 A/B edge 都正常，且 `status` 顯示
+`imu_calibrated=1`、`encoder_preflight=1`、`fault_code=0` 後，才可繼續。
 
-```bash
-python3 python_examples/leader_usb_control.py --port "$PORT" path 1
-python3 python_examples/leader_usb_control.py --port "$PORT" path 2 --timeout 90
+確認四周有安全淨空且有人監看後，同一個 session 內才可測試 G1 或受監看的 G2：
+
+```text
+leader> telemetry 500
+leader> path 1
+leader> watch 30
+leader> stop
 ```
 
 此 client 會在結束、例外或 Ctrl-C 後嘗試送 `STOP`。一次只能有一個 Pi 程式開啟此

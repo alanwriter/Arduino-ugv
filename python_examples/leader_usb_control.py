@@ -7,7 +7,6 @@ import argparse
 import json
 import sys
 import time
-from typing import Iterable
 
 import serial
 
@@ -43,6 +42,20 @@ RECORD_FIELDS = {
         "left_a_edges", "left_b_edges", "left_invalid", "right_count",
         "right_valid_edges", "right_a_edges", "right_b_edges", "right_invalid",
     ),
+}
+
+SESSION_RESPONSE_TYPES = {
+    "STATUS": {"STATUS"},
+    "CONFIG": {"CONFIG"},
+    "IMU": {"IMU"},
+    "ENCODER": {"ENCODER"},
+    "STOP": {"ACK"},
+    "RESET": {"ACK"},
+    "CALIBRATE": {"ACK"},
+    "MOTOR": {"ACK"},
+    "PATH": {"ACK"},
+    "TELEMETRY": {"ACK"},
+    "PING": {"PONG"},
 }
 
 
@@ -151,6 +164,10 @@ def parse_args() -> argparse.Namespace:
     telemetry = subparsers.add_parser("telemetry", help="Print subscribed telemetry for a duration")
     telemetry.add_argument("--interval-ms", type=int, default=500)
     telemetry.add_argument("--seconds", type=float, default=10.0)
+    subparsers.add_parser(
+        "session",
+        help="Keep one USB connection open for calibration, encoder checks, and driving",
+    )
     return parser.parse_args()
 
 
@@ -165,6 +182,70 @@ def print_telemetry_for(client: NanoUsbIo, seconds: float) -> None:
         record = client.next_telemetry(timeout=min(1.0, deadline - time.monotonic()))
         if record:
             print_record(record)
+
+
+def interactive_session(client: NanoUsbIo) -> None:
+    """Run a single persistent USB session so Nano state is not reset."""
+    print(
+        "Persistent Nano session. Commands: status, config, imu, encoder, stop, "
+        "reset, calibrate, motor L R HOLD_MS, path N, telemetry MS, "
+        "watch SECONDS, ping, quit."
+    )
+    while True:
+        try:
+            words = input("leader> ").strip().split()
+        except (EOFError, KeyboardInterrupt):
+            print()
+            return
+        if not words:
+            continue
+        command = words[0].upper()
+        if command in {"QUIT", "EXIT", "Q"}:
+            return
+        if command in {"HELP", "?"}:
+            print(
+                "status | config | imu | encoder | stop | reset | calibrate | "
+                "motor <left_pwm> <right_pwm> <hold_ms> | path <1|2|3> | "
+                "telemetry <0|100..2000> | watch <seconds> | ping | quit"
+            )
+            continue
+        try:
+            if command == "WATCH":
+                if len(words) != 2:
+                    raise ValueError("watch requires a duration in seconds")
+                print_telemetry_for(client, float(words[1]))
+                continue
+            if command == "ENCODER":
+                command = "ENCODER"
+            if command == "MOTOR":
+                if len(words) != 4:
+                    raise ValueError("motor requires: left_pwm right_pwm hold_ms")
+                require_range(int(words[1]), -165, 165, "left_pwm")
+                require_range(int(words[2]), -165, 165, "right_pwm")
+                require_range(int(words[3]), 50, 1200, "hold_ms")
+            elif command == "PATH":
+                if len(words) != 2:
+                    raise ValueError("path requires: 1, 2, or 3")
+                require_range(int(words[1]), 1, 3, "path_number")
+            elif command == "TELEMETRY":
+                if len(words) != 2:
+                    raise ValueError("telemetry requires an interval in milliseconds")
+                interval = int(words[1])
+                if interval != 0:
+                    require_range(interval, 100, 2000, "telemetry interval")
+            elif command in {"STATUS", "CONFIG", "IMU", "ENCODER", "STOP", "RESET",
+                             "CALIBRATE", "PING"}:
+                if len(words) != 1:
+                    raise ValueError(f"{command.lower()} takes no arguments")
+            else:
+                raise ValueError("unknown command; type help")
+
+            timeout = 5.0 if command == "CALIBRATE" else 3.0
+            print_record(client.request(
+                command, *words[1:], expected=SESSION_RESPONSE_TYPES[command], timeout=timeout
+            ))
+        except (ProtocolError, TimeoutError, ValueError) as error:
+            print(f"ERROR: {error}", file=sys.stderr)
 
 
 def main() -> None:
@@ -205,6 +286,8 @@ def main() -> None:
             require_range(args.interval_ms, 100, 2000, "interval_ms")
             client.request("TELEMETRY", str(args.interval_ms), expected={"ACK"})
             print_telemetry_for(client, args.seconds)
+        elif args.action == "session":
+            interactive_session(client)
     finally:
         client.close()
 
