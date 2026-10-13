@@ -1,21 +1,21 @@
 #pragma once
 
 // ---------------------------------------------------------------------------
-// Follower 1 vehicle profile. This is the only vehicle-specific source file.
+// Follower 2 vehicle profile. This is the only vehicle-specific source file.
 // The shared controller, PID, safety checks and demo state machine stay equal
 // across Follower 1, Follower 2 and Leader 1.
 // ---------------------------------------------------------------------------
 
 #define VEHICLE_PROFILE_HELP_TITLE \
-  "Follower 1 controller ready. Motors are stopped after boot."
+  "Follower 2 USB velocity controller ready. Motors are stopped after boot."
 #define VEHICLE_PROFILE_PATH_POLICY \
-  "Follower 1 calibration is approved: G1/G2/G3 are available."
+  "Follower 2 supervised profile: G1/G2 enabled; G3 locked."
 #define VEHICLE_PROFILE_BOOT_MESSAGE \
-  "FIRMWARE_PROFILE=F1 (follower1 calibrated build)"
+  "FIRMWARE_PROFILE=F2 (follower2 USB velocity build)"
 #define VEHICLE_PROFILE_DEMO_BOOT_MESSAGE \
-  "FIRMWARE_PROFILE=F1-DEMO (one-shot autonomous preset path)"
+  "FIRMWARE_PROFILE=F2-DEMO (one-shot autonomous preset path)"
 #define VEHICLE_PROFILE_STARTUP_NOTICE \
-  "F1: use C while still before a path; verify any changed wiring first."
+  "F2: use CALIBRATE while still; verify wiring before any path."
 
 // Current shared controller requires this standardized encoder interrupt map:
 // left A/B = D2/D8, right A/B = D7/D12. The low-level AVR decoder uses these
@@ -34,10 +34,10 @@ constexpr uint8_t RIGHT_PWM_PIN = 10;
 constexpr uint8_t MPU6050_SDA_PIN = A4;
 constexpr uint8_t MPU6050_SCL_PIN = A5;
 
-// 2026-09-06 F1 measurement: 12,035 decoded ticks across 10 marked left
-// wheel revolutions. Right remains a conservative provisional 1200 value.
-constexpr float LEFT_TICKS_PER_WHEEL_REVOLUTION = 1203.5f;
-constexpr float RIGHT_TICKS_PER_WHEEL_REVOLUTION = 1200.0f;
+// 2026-09-06 F2 measurement: decoded 4x AB counts across 10 marked turns.
+constexpr float LEFT_TICKS_PER_WHEEL_REVOLUTION = 1216.2f;
+constexpr float RIGHT_TICKS_PER_WHEEL_REVOLUTION = 1237.4f;
+// Shared provisional geometry; refine only from repeated floor measurements.
 constexpr float WHEEL_DIAMETER_MM = 65.0f;
 constexpr float WHEEL_TRACK_MM = 130.0f;
 
@@ -46,8 +46,8 @@ constexpr bool RIGHT_MOTOR_REVERSED = false;
 constexpr bool LEFT_ENCODER_REVERSED = false;
 constexpr bool RIGHT_ENCODER_REVERSED = true;
 constexpr bool GYRO_Z_REVERSED = false;
-// F1's calibrated turns need no additional path-turn output bias.
+// Keep turn output at the base value while F2 turn geometry is diagnosed.
 constexpr int TURN_PWM_BIAS = 0;
 
-// F1's current full profile can use all supplied preset paths.
-constexpr uint8_t MAX_APPROVED_PRESET_PATH = 3;
+// G3 remains locked until F2 closure and turn geometry are revalidated.
+constexpr uint8_t MAX_APPROVED_PRESET_PATH = 2;
