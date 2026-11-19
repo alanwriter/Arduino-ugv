@@ -39,7 +39,7 @@ constexpr float LEFT_TICKS_PER_WHEEL_REVOLUTION = 1216.4f;
 constexpr float RIGHT_TICKS_PER_WHEEL_REVOLUTION = 1222.4f;
 // Shared 2026-09-06 geometry assumption for F1, F2 and L1. Refine only from
 // repeated floor tests; the same physical wheel/chassis dimensions are used.
-constexpr float WHEEL_DIAMETER_MM = 65.0f; // Provisional.
+constexpr float WHEEL_DIAMETER_MM = 74.64f; // 2026-11-18: 65 mm x own 2 m ground/odometry ratio 2300/2002.9=1.1483.
 constexpr float WHEEL_TRACK_MM = 130.0f;   // Provisional.
 
 constexpr bool LEFT_MOTOR_REVERSED = false;
