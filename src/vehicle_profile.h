@@ -38,7 +38,7 @@ constexpr uint8_t MPU6050_SCL_PIN = A5;
 // wheel revolutions. Right remains a conservative provisional 1200 value.
 constexpr float LEFT_TICKS_PER_WHEEL_REVOLUTION = 1203.5f;
 constexpr float RIGHT_TICKS_PER_WHEEL_REVOLUTION = 1200.0f;
-constexpr float WHEEL_DIAMETER_MM = 65.0f;
+constexpr float WHEEL_DIAMETER_MM = 74.30f; // 2026-11-18: 65 mm x own 2 m ground/odometry ratio 2290/2003.5=1.1430.
 constexpr float WHEEL_TRACK_MM = 130.0f;
 
 constexpr bool LEFT_MOTOR_REVERSED = false;

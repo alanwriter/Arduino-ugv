@@ -41,8 +41,15 @@ constexpr int MOTOR_MAX_PWM = 165;
 constexpr int DEFAULT_MANUAL_PWM = 80;
 constexpr unsigned long MANUAL_COMMAND_TIMEOUT_MS = 1200;
 
-constexpr float MOTOR_STATIC_PWM = 55.0f;
-constexpr float MOTOR_PWM_PER_TICKS_PER_SECOND = 0.14f;
+// F1 forward-only candidate maps fitted on 2026-11-18 closed-loop steady
+// 1 s windows (count slope vs mean PWM, TPS 250-650).  Below ~250 TPS is an
+// extrapolation.  Reverse retains the older map until measured separately.
+constexpr float LEFT_FORWARD_PWM_BASE = 22.4f;
+constexpr float LEFT_FORWARD_PWM_PER_TPS = 0.0126f;
+constexpr float RIGHT_FORWARD_PWM_BASE = 29.9f;
+constexpr float RIGHT_FORWARD_PWM_PER_TPS = 0.0143f;
+constexpr float REVERSE_MOTOR_STATIC_PWM = 55.0f;
+constexpr float REVERSE_MOTOR_PWM_PER_TPS = 0.14f;
 constexpr float WHEEL_PID_KP = 0.10f;
 constexpr float WHEEL_PID_KI = 0.08f;
 constexpr float WHEEL_PID_INTEGRAL_LIMIT = 220.0f;
@@ -93,7 +100,9 @@ constexpr unsigned long PREFLIGHT_MIN_PHASE_EDGES = 20UL;
 constexpr float PREFLIGHT_MIN_PHASE_EDGE_RATIO = 0.75f;
 constexpr unsigned int PREFLIGHT_MAX_INVALID_TRANSITIONS = 10U;
 
-constexpr float IMU_GYRO_BLEND = 0.70f;
+// Experimental odometry: wheel encoders provide distance; calibrated MPU6050
+// gyro-Z provides the complete heading increment.
+constexpr float IMU_GYRO_BLEND = 1.00f;
 constexpr float GYRO_SCALE_LSB_PER_DEGREE_PER_SECOND = 131.0f;
 constexpr float ACCEL_SCALE_LSB_PER_G = 16384.0f;
 constexpr float GYRO_DEADBAND_DEGREES_PER_SECOND = 0.20f;
@@ -665,7 +674,8 @@ void updateWheelMeasurement(WheelController &controller, long count,
       static_cast<float>(deltaTicks) / dtSeconds;
 }
 
-int calculateWheelPwm(WheelController &controller, float dtSeconds) {
+int calculateWheelPwm(WheelController &controller, float dtSeconds,
+                      bool isLeftWheel) {
   const float target = controller.targetTicksPerSecond;
   if (absoluteFloat(target) < 0.5f) {
     controller.integral = 0.0f;
@@ -679,9 +689,12 @@ int calculateWheelPwm(WheelController &controller, float dtSeconds) {
                                    WHEEL_PID_INTEGRAL_LIMIT);
 
   const float direction = target >= 0.0f ? 1.0f : -1.0f;
-  float command = direction *
-                      (MOTOR_STATIC_PWM +
-                       MOTOR_PWM_PER_TICKS_PER_SECOND * absoluteFloat(target)) +
+  const float feedForward = target >= 0.0f
+      ? (isLeftWheel ? LEFT_FORWARD_PWM_BASE + LEFT_FORWARD_PWM_PER_TPS * target
+                     : RIGHT_FORWARD_PWM_BASE + RIGHT_FORWARD_PWM_PER_TPS * target)
+      : (REVERSE_MOTOR_STATIC_PWM +
+         REVERSE_MOTOR_PWM_PER_TPS * absoluteFloat(target));
+  float command = direction * feedForward +
                   WHEEL_PID_KP * error + WHEEL_PID_KI * controller.integral;
 
   // Do not reverse a wheel merely because its velocity overshot its target.
@@ -1291,8 +1304,8 @@ void controlStep(float dtSeconds) {
     if (motionMode == MOTION_PATH) {
       slewWheelTarget(leftController, dtSeconds);
       slewWheelTarget(rightController, dtSeconds);
-      int leftPwm = calculateWheelPwm(leftController, dtSeconds);
-      int rightPwm = calculateWheelPwm(rightController, dtSeconds);
+      int leftPwm = calculateWheelPwm(leftController, dtSeconds, true);
+      int rightPwm = calculateWheelPwm(rightController, dtSeconds, false);
       if (activePathStepIsTurn()) {
         leftPwm = addSignedPwmBias(leftPwm, TURN_PWM_BIAS);
         rightPwm = addSignedPwmBias(rightPwm, TURN_PWM_BIAS);
@@ -1324,8 +1337,8 @@ void controlStep(float dtSeconds) {
     }
     slewWheelTarget(leftController, dtSeconds);
     slewWheelTarget(rightController, dtSeconds);
-    setMotorOutputs(calculateWheelPwm(leftController, dtSeconds),
-                    calculateWheelPwm(rightController, dtSeconds));
+    setMotorOutputs(calculateWheelPwm(leftController, dtSeconds, true),
+                    calculateWheelPwm(rightController, dtSeconds, false));
     return;
   }
 
@@ -1626,7 +1639,7 @@ void printUsbIoStatus(uint16_t sequence, bool telemetry) {
 void printUsbIoConfiguration(uint16_t sequence) {
   // IO,CONFIG,sequence,left_ticks_per_rev,right_ticks_per_rev,
   // wheel_diameter_mm,wheel_track_mm,turn_pwm_bias,max_pwm,
-  // max_manual_hold_ms,max_approved_path
+  // max_manual_hold_ms,max_approved_path,heading_gyro_blend
   Serial.print(F("IO,CONFIG,"));
   Serial.print(sequence);
   Serial.print(F(","));
@@ -1644,7 +1657,9 @@ void printUsbIoConfiguration(uint16_t sequence) {
   Serial.print(F(","));
   Serial.print(MANUAL_COMMAND_TIMEOUT_MS);
   Serial.print(F(","));
-  Serial.println(MAX_APPROVED_PRESET_PATH);
+  Serial.print(MAX_APPROVED_PRESET_PATH);
+  Serial.print(F(","));
+  Serial.println(IMU_GYRO_BLEND, 2);
 }
 
 void printUsbIoImu(uint16_t sequence) {
