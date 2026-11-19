@@ -38,7 +38,7 @@ constexpr uint8_t MPU6050_SCL_PIN = A5;
 constexpr float LEFT_TICKS_PER_WHEEL_REVOLUTION = 1216.2f;
 constexpr float RIGHT_TICKS_PER_WHEEL_REVOLUTION = 1237.4f;
 // Shared provisional geometry; refine only from repeated floor measurements.
-constexpr float WHEEL_DIAMETER_MM = 65.0f;
+constexpr float WHEEL_DIAMETER_MM = 75.05f; // 2026-11-18: 65 mm x own 2 m ground/odometry ratio 2315/2004.9=1.1547.
 constexpr float WHEEL_TRACK_MM = 130.0f;
 
 constexpr bool LEFT_MOTOR_REVERSED = false;
